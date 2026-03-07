@@ -39,10 +39,21 @@ class AirtableClient:
     # -------------------------------------------------------------------------
 
     def find_company(self, company_name: str) -> Optional[dict]:
-        """Search for a company by name (case-insensitive partial match)."""
+        """Search for a company by name (exact match preferred, partial fallback)."""
         try:
-            formula = f"SEARCH(LOWER('{company_name.lower()}'), LOWER({{Name}}))"
-            records = self.companies.all(formula=formula)
+            name_q = company_name.lower().replace("'", "\\'")
+            # Prefer an exact case-insensitive match so "Airtable" doesn't hit
+            # "Airtable Enterprise" or some other record that shares the substring.
+            exact_formula = f"LOWER({{Name}}) = LOWER('{name_q}')"
+            records = self.companies.all(formula=exact_formula)
+            if records:
+                logger.info("find_company exact match for %r: %r", company_name, records[0]["fields"].get("Name"))
+                return records[0]
+            # Fall back to partial / substring match
+            partial_formula = f"SEARCH(LOWER('{name_q}'), LOWER({{Name}}))"
+            records = self.companies.all(formula=partial_formula)
+            if records:
+                logger.info("find_company partial match for %r: %r", company_name, records[0]["fields"].get("Name"))
             return records[0] if records else None
         except Exception:
             logger.exception("find_company failed for %r", company_name)
@@ -86,34 +97,23 @@ class AirtableClient:
         """
         Find a role by title scoped to a company.
 
-        Uses ARRAYJOIN({Company}) inside the Airtable formula, which resolves
-        linked records to their primary-field display values (i.e. company names)
-        server-side — so matching is exact and no separate get_company loop is needed.
+        Two-step: resolve the company record by name first (exact match preferred),
+        then search roles using the company's record ID in the linked Company field.
+        Record-ID matching via FIND/ARRAYJOIN is reliable in Airtable filter formulas;
+        display-name matching via ARRAYJOIN is not (filterByFormula returns IDs, not names).
         """
         try:
-            title_q = role_title.lower().replace("'", "\\'")
-            company_q = company_name.lower().replace("'", "\\'")
-            formula = (
-                f"AND("
-                f"SEARCH(LOWER('{title_q}'), LOWER({{Title}})), "
-                f"SEARCH(LOWER('{company_q}'), LOWER(ARRAYJOIN({{Company}})))"
-                f")"
-            )
-            records = self.roles.all(formula=formula)
-            logger.info(
-                "find_role_for_company: %d result(s) for title=%r company=%r",
-                len(records), role_title, company_name,
-            )
-            if not records:
+            co = self.find_company(company_name)
+            if not co:
+                logger.info("find_role_for_company: company %r not found", company_name)
                 return None, None
 
-            role = records[0]
-            # Resolve the company record for richer synopsis context.
-            # Try direct ID lookup first; fall back to formula search by name.
-            linked_ids = role["fields"].get("Company", [])
-            co = self.get_company(linked_ids[0]) if linked_ids else None
-            if co is None:
-                co = self.find_company(company_name)
+            role = self.find_role(role_title, co["id"])
+            logger.info(
+                "find_role_for_company: role=%r for company=%r (%r) -> %s",
+                role_title, company_name, co["fields"].get("Name"),
+                "found" if role else "not found",
+            )
             return role, co
         except Exception:
             logger.exception("find_role_for_company failed for %r / %r", role_title, company_name)
