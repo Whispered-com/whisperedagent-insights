@@ -307,10 +307,10 @@
       });
       const data = await res.json();
       removeTyping();
-      appendMsg(data.reply || data.error, "agent");
+      appendMsg(data.reply || data.error || "No response.", "agent");
     } catch (err) {
       removeTyping();
-      appendMsg("Something went wrong. Please try again.", "error");
+      appendMsg("Could not reach the server. Please refresh.", "error");
     }
 
     sendBtn.disabled = false;

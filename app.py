@@ -54,7 +54,11 @@ def start():
     _, user_id, user_name = _get_body()
     if not user_id:
         return jsonify({"error": "user_id is required"}), 400
-    reply = agent.start_conversation(user_id, user_name)
+    try:
+        reply = agent.start_conversation(user_id, user_name)
+    except Exception as e:
+        logger.exception("Error in /start")
+        return jsonify({"reply": f"Sorry, something went wrong starting up: {e}"}), 500
     return jsonify({"reply": reply})
 
 
@@ -65,11 +69,15 @@ def message():
     if not user_id or not text:
         return jsonify({"error": "user_id and text are required"}), 400
 
-    state = state_manager.get(user_id)
-    if state is None:
-        reply = agent.start_conversation(user_id, user_name)
-    else:
-        reply = agent.handle_message(user_id, user_name, text)
+    try:
+        state = state_manager.get(user_id)
+        if state is None:
+            reply = agent.start_conversation(user_id, user_name)
+        else:
+            reply = agent.handle_message(user_id, user_name, text)
+    except Exception as e:
+        logger.exception("Error in /message")
+        return jsonify({"reply": f"Sorry, something went wrong: {e}"}), 500
     return jsonify({"reply": reply})
 
 
@@ -78,7 +86,11 @@ def reset():
     _, user_id, user_name = _get_body()
     if not user_id:
         return jsonify({"error": "user_id is required"}), 400
-    reply = agent.start_conversation(user_id, user_name)
+    try:
+        reply = agent.start_conversation(user_id, user_name)
+    except Exception as e:
+        logger.exception("Error in /reset")
+        return jsonify({"reply": f"Sorry, something went wrong: {e}"}), 500
     return jsonify({"reply": reply})
 
 
