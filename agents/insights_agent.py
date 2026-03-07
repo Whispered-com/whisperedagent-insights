@@ -102,22 +102,34 @@ class InsightsAgent:
         role_record = None
 
         if role_title and company_name:
-            # Most reliable: iterate all title-matching roles, check linked company name
+            # Preferred: iterate all title-matching roles, resolve linked company by record ID,
+            # verify name matches. Role and company come from the same linked pair — no mismatch.
             role_record, company_record = self.db.find_role_for_company(role_title, company_name)
 
-        if role_title and not role_record:
-            # Fallback: scoped (if company found) or global search
-            if company_record:
-                role_record = self.db.find_role(role_title, company_record["id"])
-            else:
-                role_record = self.db.find_role(role_title)
-                if role_record:
-                    linked = role_record["fields"].get("Company", [])
-                    if linked:
-                        company_record = self.db.get_company(linked[0])
+            if not role_record:
+                # find_role_for_company found nothing (linked record IDs couldn't be resolved).
+                # Try scoping via the formula-based company lookup instead.
+                company_record = self.db.find_company(company_name)
+                if company_record:
+                    role_record = self.db.find_role(role_title, company_record["id"])
+                    if not role_record:
+                        # Company found but no matching role — reset both so we don't
+                        # accidentally show the wrong company.
+                        company_record = None
 
-        if not role_record and company_name and not company_record:
+        elif role_title:
+            role_record = self.db.find_role(role_title)
+
+        elif company_name:
             company_record = self.db.find_company(company_name)
+
+        # If we have a role but no company, resolve company from the role's own linked field.
+        # Only do this when company_record is still None — never overwrite a company that came
+        # from the same search as the role (no mixing records from different lookups).
+        if role_record and not company_record:
+            linked = role_record["fields"].get("Company", [])
+            if linked:
+                company_record = self.db.get_company(linked[0])
 
         if not role_record and not company_record:
             entity = company_name or role_title
@@ -129,14 +141,18 @@ class InsightsAgent:
         if company_record:
             state.company_record_id = company_record["id"]
             state.company_name = company_record["fields"].get("Name", company_name)
+        elif company_name:
+            # No company record resolved but store user-supplied name for display
+            state.company_name = company_name
+
         if role_record:
             state.role_record_id = role_record["id"]
             state.role_title = role_record["fields"].get("Title", role_title)
 
-        # Always confirm the match before showing the full synopsis
+        state.phase = Phase.CONFIRMING
+
         role_label = state.role_title or "(role)"
         company_label = state.company_name or "(unknown company)"
-        state.phase = Phase.CONFIRMING
 
         if state.role_title and state.company_name:
             return f"I found \"{role_label}\" at {company_label} — is that the one you're asking about?"

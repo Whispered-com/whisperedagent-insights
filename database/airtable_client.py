@@ -91,15 +91,23 @@ class AirtableClient:
         try:
             formula = f"SEARCH(LOWER('{role_title.lower()}'), LOWER({{Title}}))"
             candidates = self.roles.all(formula=formula)
+            logger.info("find_role_for_company: %d candidates for title=%r", len(candidates), role_title)
             for role in candidates:
+                role_title_found = role["fields"].get("Title", "")
                 linked_ids = role["fields"].get("Company", [])
+                logger.info("  role %r linked_ids=%r", role_title_found, linked_ids)
                 for co_id in linked_ids:
                     co = self.get_company(co_id)
                     if co:
                         co_name = co["fields"].get("Name", "")
+                        logger.info("    resolved company %r for id %r", co_name, co_id)
                         if (company_name.lower() in co_name.lower()
                                 or co_name.lower() in company_name.lower()):
+                            logger.info("    MATCHED role %r at %r", role_title_found, co_name)
                             return role, co
+                    else:
+                        logger.warning("    get_company returned None for id %r", co_id)
+            logger.info("find_role_for_company: no match found for company=%r", company_name)
             return None, None
         except Exception:
             logger.exception("find_role_for_company failed for %r / %r", role_title, company_name)
