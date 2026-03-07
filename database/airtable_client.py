@@ -29,10 +29,43 @@ class AirtableClient:
         self.api = Api(api_key)
         self.base = self.api.base(base_id)
 
-        self.companies = self.base.table(
-            os.environ.get("AIRTABLE_COMPANIES_TABLE", AIRTABLE_COMPANIES_TABLE_ID)
+        roles_table_name = os.environ.get("AIRTABLE_ROLES_TABLE", "Roles")
+        self.roles = self.base.table(roles_table_name)
+
+        # Resolve the Companies table that the Roles table actually links to.
+        # The hardcoded AIRTABLE_COMPANIES_TABLE_ID may differ from the real
+        # linked table, causing get_company() to return 404 for all role-linked IDs.
+        companies_table_id = self._discover_companies_table(
+            company_field_name=os.environ.get("AIRTABLE_COMPANY_FIELD", "Company"),
+            fallback_id=os.environ.get("AIRTABLE_COMPANIES_TABLE", AIRTABLE_COMPANIES_TABLE_ID),
         )
-        self.roles = self.base.table(os.environ.get("AIRTABLE_ROLES_TABLE", "Roles"))
+        self.companies = self.base.table(companies_table_id)
+
+    def _discover_companies_table(self, company_field_name: str, fallback_id: str) -> str:
+        """
+        Return the table ID that the Roles table's Company linked field points to.
+        Falls back to fallback_id if the schema API fails or the field is not found.
+        """
+        try:
+            schema = self.roles.schema()
+            for field in schema.fields:
+                if field.name == company_field_name and field.type == "multipleRecordLinks":
+                    linked_id = field.options.linked_table_id
+                    logger.info(
+                        "Discovered Companies table via Roles.%r schema: %s",
+                        company_field_name, linked_id,
+                    )
+                    return linked_id
+            logger.warning(
+                "Field %r not found or not a link field in Roles schema; falling back to %s",
+                company_field_name, fallback_id,
+            )
+        except Exception:
+            logger.warning(
+                "Could not fetch Roles schema to discover Companies table; falling back to %s",
+                fallback_id,
+            )
+        return fallback_id
 
     # -------------------------------------------------------------------------
     # Company lookups
