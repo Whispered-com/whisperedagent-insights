@@ -16,7 +16,7 @@ def build_company_synopsis_prompt(company: dict, roles: list, insights: list) ->
     fields = company.get("fields", {})
 
     company_section = f"""
-COMPANY: {fields.get('Name', 'Unknown')}
+COMPANY: {fields.get('Company Name', 'Unknown')}
 
 Description:
 {fields.get('Description', 'No description on file.')}
@@ -25,7 +25,7 @@ HG6M (High-Growth 6-Month Outlook):
 {fields.get('HG6M', 'Not available.')}
 
 Confidential Notes (internal only – do NOT share verbatim, summarize tastefully):
-{fields.get('ConfidentialNotes', 'None.')}
+{fields.get('Confidential Notes', 'None.')}
 
 Number of Employees: {fields.get('Employees', 'Unknown')}
 """.strip()
@@ -37,8 +37,8 @@ Number of Employees: {fields.get('Employees', 'Unknown')}
             rf = r.get("fields", {})
             role_lines.append(
                 f"- {rf.get('Title', 'Untitled')} | "
-                f"Hiring Manager: {rf.get('HiringManager', 'Unknown')} | "
-                f"Location: {rf.get('Location', 'Unknown')} | "
+                f"Hiring Manager: {rf.get('HM Name', 'Unknown')} | "
+                f"Location: {', '.join(rf.get('HQ Location') or []) or fields.get('HQ', 'Unknown')} | "
                 f"Find: {rf.get('Find', '')} | "
                 f"Notes: {rf.get('Notes', '')}"
             )
@@ -86,9 +86,9 @@ def build_role_synopsis_prompt(role: dict, company: dict, insights: list) -> str
 
     role_section = f"""
 ROLE: {rf.get('Title', 'Unknown')}
-Company: {cf.get('Name', 'Unknown')}
-Hiring Manager: {rf.get('HiringManager', 'Unknown')}
-Location: {rf.get('Location', 'Unknown')}
+Company: {cf.get('Company Name', 'Unknown')}
+Hiring Manager: {rf.get('HM Name', 'Unknown')}
+Location: {rf.get('HQ Location') and ', '.join(rf.get('HQ Location')) or cf.get('HQ', 'Unknown')}
 How to Find / Apply: {rf.get('Find', 'Unknown')}
 Notes: {rf.get('Notes', 'None.')}
 """.strip()

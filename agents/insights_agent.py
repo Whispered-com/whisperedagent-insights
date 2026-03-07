@@ -127,7 +127,7 @@ class InsightsAgent:
 
         if company_record:
             state.company_record_id = company_record["id"]
-            state.company_name = company_record["fields"].get("Name", company_name)
+            state.company_name = company_record["fields"].get("Company Name", company_name)
         elif company_name:
             # No company record resolved but store user-supplied name for display
             state.company_name = company_name
