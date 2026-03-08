@@ -499,26 +499,30 @@
     for (const [field, label] of Object.entries(ROLE_FIELD_LABELS)) {
       const value = roleFields[field];
       if (!value) continue;
-      updatesBody.appendChild(makeFieldRow(roleName, label, value));
+      // "Role - Title / Company - Field Name"
+      const key = `Role - ${roleName} / ${companyName} - ${label}`;
+      updatesBody.appendChild(makeFieldRow(key, value));
     }
 
     for (const [field, label] of Object.entries(COMPANY_FIELD_LABELS)) {
       const value = companyFields[field];
       if (!value) continue;
-      updatesBody.appendChild(makeFieldRow(companyName, label, value));
+      // "Company - Company Name - Field Name"
+      const key = `Company - ${companyName} - ${label}`;
+      updatesBody.appendChild(makeFieldRow(key, value));
     }
   }
 
-  // "Object - Field Name — value"  (object + field bolded)
-  function makeFieldRow(objectName, fieldLabel, value) {
+  // Bold key, plain value: "**Key** — value"
+  function makeFieldRow(key, value) {
     const row = document.createElement("div");
     row.className = "update-field";
 
-    const key = document.createElement("span");
-    key.className = "update-field-key";
-    key.textContent = `${objectName} - ${fieldLabel}`;
+    const keySpan = document.createElement("span");
+    keySpan.className = "update-field-key";
+    keySpan.textContent = key;
 
-    row.appendChild(key);
+    row.appendChild(keySpan);
     row.appendChild(document.createTextNode(` — ${value}`));
     return row;
   }
