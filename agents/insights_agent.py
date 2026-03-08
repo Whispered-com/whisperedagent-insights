@@ -202,14 +202,45 @@ class InsightsAgent:
         mode = state.mode
         entity = state.role_title or state.company_name
 
-        # FREE + company: immediately show public snapshot
+        # Check if the original user intent was to list roles at this company
+        prior_user_msgs = [m["content"] for m in state.messages if m["role"] == "user"][:-1]
+        roles_list_intent = (
+            not state.role_record_id
+            and state.company_record_id
+            and any(self._is_roles_list_intent(t) for t in prior_user_msgs)
+        )
+
+        # FREE + company: role-listing intent → confirm existence only; otherwise show public snapshot
         if mode == "free" and not state.role_record_id:
-            co_rec = self.db.get_company(state.company_record_id)
             state.phase = Phase.COMPANY_FOUND
+            if roles_list_intent:
+                roles = self.db.get_company_roles(state.company_record_id)
+                count = len(roles)
+                noun = "role" if count == 1 else "roles"
+                if count:
+                    return (
+                        f"We do have {count} {noun} tracked for {state.company_name}, "
+                        "but the details are only available on Pro and above. "
+                        "**Upgrade to Pro to see the role titles and hiring details.**"
+                    )
+                return f"I don't have any roles tracked for {state.company_name} at the moment."
+            co_rec = self.db.get_company(state.company_record_id)
             return self._generate_company_synopsis(co_rec, mode="free")
 
-        # FREE + role | PRO (any): ask user to share first
+        # FREE + role | PRO (any): role-listing intent for pro → confirm existence only; otherwise share-first flow
         if mode in ("free", "pro"):
+            if mode == "pro" and roles_list_intent:
+                state.phase = Phase.COMPANY_FOUND
+                roles = self.db.get_company_roles(state.company_record_id)
+                count = len(roles)
+                noun = "role" if count == 1 else "roles"
+                if count:
+                    return (
+                        f"We do have {count} {noun} tracked for {state.company_name}. "
+                        "**Upgrade to Premium to see the full breakdown with hiring manager and location details — "
+                        "or is there a specific role you've already heard about?**"
+                    )
+                return f"I don't have any roles tracked for {state.company_name} at the moment."
             state.phase = Phase.AWAITING_SHARE
             if mode == "free":
                 return (
@@ -222,7 +253,12 @@ class InsightsAgent:
                     "**what have you already learned from your conversations or research?**"
                 )
 
-        # PREMIUM: immediately show brief synopsis
+        # PREMIUM: role-listing intent → show full roles list
+        if roles_list_intent:
+            state.phase = Phase.COMPANY_FOUND
+            return self._list_company_roles(state)
+
+        # PREMIUM: role confirmed → show synopsis
         if state.role_title and state.company_name:
             role_rec, co_rec = self.db.find_role_for_company(state.role_title, state.company_name)
             if role_rec:
@@ -297,9 +333,29 @@ class InsightsAgent:
 
     def _handle_followup(self, state: ConversationState, user_text: str) -> str:
         """Answer follow-up questions, extract data, and probe gaps conversationally."""
-        # Premium: list all open/closed roles if that's what they're asking
-        if state.mode == "premium" and state.company_record_id and self._is_roles_list_intent(user_text):
-            return self._list_company_roles(state)
+        # Role listing intent — tier-appropriate response
+        if state.company_record_id and self._is_roles_list_intent(user_text):
+            if state.mode == "premium":
+                return self._list_company_roles(state)
+            else:
+                roles = self.db.get_company_roles(state.company_record_id)
+                count = len(roles)
+                noun = "role" if count == 1 else "roles"
+                company = state.company_name or "this company"
+                if not count:
+                    return f"I don't have any roles tracked for {company} at the moment."
+                if state.mode == "free":
+                    return (
+                        f"We do have {count} {noun} tracked for {company}, "
+                        "but the details are only available on Pro and above. "
+                        "**Upgrade to Pro to unlock the role titles and hiring details.**"
+                    )
+                # pro
+                return (
+                    f"We do have {count} {noun} tracked for {company}. "
+                    "**Upgrade to Premium to see the full breakdown — "
+                    "or is there a specific role you've already come across?**"
+                )
 
         # Check if they're asking about a new entity — reset and re-identify if so
         parsed = self._parse_company_and_role(user_text)

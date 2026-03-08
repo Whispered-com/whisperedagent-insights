@@ -124,8 +124,19 @@ class AirtableClient:
             return None
 
     def get_company_roles(self, company_id: str) -> list[dict]:
-        """Return all roles linked to a company."""
+        """Return all roles linked to a company.
+
+        Airtable resolves ARRAYJOIN({Company}) to display values (company names),
+        not record IDs, so we must filter by name rather than by ID.
+        """
         try:
+            co = self.get_company(company_id)
+            company_name = (co.get("fields") or {}).get("Company Name", "") if co else ""
+            if company_name:
+                name_q = company_name.lower().replace("'", "\\'")
+                formula = f"SEARCH(LOWER('{name_q}'), LOWER(ARRAYJOIN({{Company}})))"
+                return self.roles.all(formula=formula)
+            # Fallback: ID-based (works if Airtable config differs)
             formula = f"FIND('{company_id}', ARRAYJOIN({{Company}}))"
             return self.roles.all(formula=formula)
         except Exception:
