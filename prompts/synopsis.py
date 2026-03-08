@@ -15,6 +15,10 @@ def build_company_synopsis_prompt(company: dict, roles: list, insights: list, mo
     """
     fields = company.get("fields", {})
 
+    investors = fields.get('Investors', '')
+    if isinstance(investors, list):
+        investors = ', '.join(investors)
+
     company_section = f"""
 COMPANY: {fields.get('Company Name', 'Unknown')}
 
@@ -25,6 +29,7 @@ HG6M (High-Growth 6-Month Outlook):
 {fields.get('HG6M', 'Not available.')}
 
 Number of Employees: {fields.get('Employees', 'Unknown')}
+Investors: {investors or 'Unknown'}
 """.strip()
 
     # Confidential notes: pro and premium only
@@ -38,13 +43,17 @@ Number of Employees: {fields.get('Employees', 'Unknown')}
         role_lines = []
         for r in roles:
             rf = r.get("fields", {})
-            role_lines.append(
-                f"- {rf.get('Title', 'Untitled')} | "
-                f"Hiring Manager: {rf.get('HM Name', 'Unknown')} | "
-                f"Location: {', '.join(rf.get('HQ Location') or []) or fields.get('HQ', 'Unknown')} | "
-                f"Find: {rf.get('Find', '')} | "
-                f"Notes: {rf.get('Notes', '')}"
-            )
+            if mode == "free":
+                # Free tier: titles only — no confidential role details
+                role_lines.append(f"- {rf.get('Title', 'Untitled')}")
+            else:
+                role_lines.append(
+                    f"- {rf.get('Title', 'Untitled')} | "
+                    f"Hiring Manager: {rf.get('HM Name', 'Unknown')} | "
+                    f"Location: {', '.join(rf.get('HQ Location') or []) or fields.get('HQ', 'Unknown')} | "
+                    f"Find: {rf.get('Find', '')} | "
+                    f"Notes: {rf.get('Notes', '')}"
+                )
         roles_section = "OPEN ROLES:\n" + "\n".join(role_lines)
     else:
         roles_section = "OPEN ROLES: No open roles currently tracked."
@@ -81,8 +90,8 @@ Number of Employees: {fields.get('Employees', 'Unknown')}
     if mode == "free":
         mode_instruction = (
             "IMPORTANT: This is a Free-tier response. Share only public information "
-            "(description, headcount, open role titles). Do NOT mention confidential notes "
-            "or community insights."
+            "(description, headcount, investors, open role titles). Do NOT mention "
+            "confidential notes or community insights."
         )
     elif mode == "pro":
         mode_instruction = (
