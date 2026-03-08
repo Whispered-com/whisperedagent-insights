@@ -541,6 +541,23 @@ class InsightsAgent:
                 existing = updates["role"].get("Notes") or airtable_role_fields.get("Notes", "")
                 merged = self._structured_merge("role_notes", existing, value)
                 updates["role"]["Notes"] = merged
+            elif field == "Location":
+                location_text = str(value)
+                # Map to valid Airtable picklist values
+                valid_options = self.db.get_location_options()
+                if valid_options:
+                    mapped = self._map_location_to_picklist(location_text, valid_options)
+                    if mapped:
+                        existing_loc = updates["role"].get("HQ Location") or airtable_role_fields.get("HQ Location") or []
+                        if isinstance(existing_loc, str):
+                            existing_loc = [existing_loc] if existing_loc else []
+                        # Merge: add new values, preserve existing, deduplicate
+                        merged_loc = list(dict.fromkeys(existing_loc + mapped))
+                        updates["role"]["HQ Location"] = merged_loc
+                # Always also capture the full detail text in Notes → Details
+                existing_notes = updates["role"].get("Notes") or airtable_role_fields.get("Notes", "")
+                merged_notes = self._structured_merge("role_notes", existing_notes, f"Location detail: {location_text}")
+                updates["role"]["Notes"] = merged_notes
             else:
                 # Prefer already-merged session value; fall back to Airtable — synthesize, never just concat
                 existing = str(updates["role"].get(field) or airtable_role_fields.get(field) or "")
@@ -560,6 +577,26 @@ class InsightsAgent:
                     # Prefer already-merged session value; fall back to Airtable — synthesize, never just concat
                     existing = str(updates["company"].get(field) or airtable_company_fields.get(field) or "")
                     updates["company"][field] = self._simple_merge(field, existing, value) if existing else value
+
+    def _map_location_to_picklist(self, location_text: str, valid_options: list[str]) -> list[str]:
+        """Map a free-text location description to one or more valid Airtable HQ Location picklist values."""
+        options_str = "\n".join(f"- {o}" for o in valid_options)
+        prompt = (
+            f'The following location description comes from a job posting or conversation:\n'
+            f'"{location_text}"\n\n'
+            f'Match it to one or more values from this picklist:\n{options_str}\n\n'
+            f'Return ONLY a JSON array of matching picklist values using the exact strings above. '
+            f'If nothing fits, return []. No preamble.'
+        )
+        try:
+            raw = self._call_claude([{"role": "user", "content": prompt}], max_tokens=128)
+            cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            result = json.loads(cleaned)
+            if isinstance(result, list):
+                return [v for v in result if v in valid_options]
+        except Exception:
+            logger.debug("_map_location_to_picklist failed for %r", location_text)
+        return []
 
     def _simple_merge(self, field_name: str, existing: str, new_info: str) -> str:
         """
