@@ -561,11 +561,26 @@
     input.focus();
   }
 
+  async function fetchWithRetry(url, options, maxAttempts = 4) {
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const res = await fetch(url, options);
+        if (res.ok || res.status < 500) return res;
+        // 5xx — server still spinning up, retry
+        if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 2 ** attempt * 500));
+      } catch (err) {
+        if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 2 ** attempt * 500));
+        else throw err;
+      }
+    }
+    throw new Error("Server unavailable after retries");
+  }
+
   async function startConversation() {
     showEmptyState();
     showTyping();
     try {
-      const res = await fetch("/start", {
+      const res = await fetchWithRetry("/start", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, user_name: userName, mode }),
@@ -591,7 +606,7 @@
     showTyping();
 
     try {
-      const res = await fetch("/message", {
+      const res = await fetchWithRetry("/message", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: userId, user_name: userName, text, mode }),
