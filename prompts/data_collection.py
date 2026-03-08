@@ -34,9 +34,9 @@ ROLE_GAP_DESCRIPTIONS = {
         "help someone get an introduction"
     ),
     "Notes": (
-        "role details — scope, responsibilities, who it reports to, team size, "
-        "who the hiring manager is, what skills they're prioritising, why they're "
-        "making this hire, and what the interview process / panel looks like"
+        "role details across three areas — Scope (responsibilities and team size); "
+        "Criteria (key skills, interview panel, reason for hire); "
+        "Details (location/remote/hybrid, hiring manager, who the role reports to)"
     ),
     "Location": "where the role is based and whether it's remote, hybrid, or in-office",
     "Compensation": "total compensation — OTE cash + bonus in USD",
@@ -106,7 +106,7 @@ def build_data_extraction_prompt(user_text: str, role_name: str, company_name: s
 
 Role fields (only include if explicitly mentioned):
 - Find: who leads the hiring search (internal sponsor, recruiter name/firm, helpful community contacts)
-- Notes: role scope, responsibilities, reporting line, team size, hiring manager name, key skills, reason for hire, interview process / panel. Also capture any qualitative comp context here (e.g. "comp is reportedly low" or "strong equity component").
+- Notes: structured as three sections — Scope (responsibilities, team size); Criteria (key skills, interview panel, reason for hire); Details (location/remote/hybrid/in-office, hiring manager, reports to). Also capture any qualitative comp context in Criteria (e.g. "comp reportedly low" or "strong equity component").
 - Location: where based, remote/hybrid/in-office
 - Compensation: INTEGER only — the annual USD cash total (base + bonus / OTE) as a plain number with no symbols, words, or punctuation (e.g. 180000). If the user gives a range use the midpoint. If the figure is vague or only qualitative (e.g. "low", "competitive") set this to null and capture the context in Notes instead.
 
@@ -129,8 +129,8 @@ Rules:
 
 ROLE_NOTES_SCHEMA = """\
 Scope: <responsibilities and team size>
-Criteria: <key skills, reason for hire, interview panel>
-Details: <location/remote/hybrid, hiring manager, reports to>\
+Criteria: <key skills, interview panel, reason for hire>
+Details: <location/remote/hybrid/in-office, hiring manager, reports to>\
 """
 
 COMPANY_NOTES_SCHEMA = """\
