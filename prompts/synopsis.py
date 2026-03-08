@@ -119,7 +119,7 @@ Write a SHORT response (3-4 sentences max) that:
 2. Notes any open roles briefly (just titles, no details dump).
 3. Ends with ONE natural, open question asking what they've learned or experienced with this company.
 
-Do NOT try to share everything — leave room for dialogue. No markdown."""
+Bold only the question sentence using **double asterisks**. Do not use any other markdown. Do NOT try to share everything — leave room for dialogue."""
 
 
 def build_role_synopsis_prompt(role: dict, company: dict, insights: list, mode: str = "premium", top_gap: str = None) -> str:
@@ -208,7 +208,48 @@ Write a SHORT response (3-4 sentences max) that:
 2. Mentions anything notable about the hiring process if we have it.
 {"3. " + can_ask_more + chr(10) if can_ask_more else ""}{"4" if can_ask_more else "3"}. {ending_instruction}
 
-Do NOT try to share everything at once — the goal is to start a dialogue. No markdown."""
+Bold only the question sentence using **double asterisks**. Do not use any other markdown. Do NOT try to share everything at once — the goal is to start a dialogue."""
+
+
+def build_roles_listing_prompt(company: dict, open_roles: list, closed_roles: list) -> str:
+    """
+    Build a prompt for a premium user asking what roles we have tracked at a company.
+    Lists open roles and recently closed ones.
+    """
+    cf = company.get("fields", {})
+    company_name = cf.get("Company Name", "this company")
+
+    def format_role(r):
+        rf = r.get("fields", {})
+        location = ", ".join(rf.get("HQ Location") or []) or cf.get("HQ", "Unknown")
+        parts = [rf.get("Title", "Untitled")]
+        if rf.get("HM Name"):
+            parts.append(f"HM: {rf['HM Name']}")
+        if location and location != "Unknown":
+            parts.append(f"Location: {location}")
+        if rf.get("Find"):
+            parts.append(f"Find: {rf['Find']}")
+        if rf.get("Notes"):
+            parts.append(f"Notes: {rf['Notes']}")
+        return "- " + " | ".join(parts)
+
+    open_section = "\n".join(format_role(r) for r in open_roles) if open_roles else "None tracked."
+    closed_section = "\n".join(format_role(r) for r in closed_roles) if closed_roles else "None tracked."
+
+    return f"""You are the Insights agent for a professional community. A premium member asked about the roles we have tracked for {company_name}.
+
+OPEN ROLES:
+{open_section}
+
+RECENTLY CLOSED ROLES:
+{closed_section}
+
+Write a SHORT response (3-5 sentences) that:
+1. Lists the open roles by title with any key details worth calling out (hiring manager, location).
+2. Mentions recently closed roles if any exist.
+3. Ends with ONE natural follow-up question.
+
+Bold only the question sentence using **double asterisks**. Do not use any other markdown."""
 
 
 def build_info_collection_prompt(entity_type: str, entity_name: str, existing_fields: dict) -> str:

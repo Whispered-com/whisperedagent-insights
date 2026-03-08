@@ -48,7 +48,8 @@ Guidelines:
 - Keep responses SHORT. 2-4 sentences is usually right. Leave room for dialogue.
 - Ask ONE question at a time. Never list questions.
 - Ask open, natural questions — not "what is the team size?" but "what's the team setup like there?"
-- Do not use markdown formatting symbols like **, ##, or _.
+- Bold the sentence containing your question using **double asterisks like this?** — do not bold anything else.
+- Do not use any other markdown (no ##, no -, no _).
 """
 
 
@@ -124,7 +125,7 @@ class InsightsAgent:
         if not company_name and not role_title:
             return (
                 "I didn't catch a company or role name there. "
-                "Could you try again? For example: \"Acme Corp\" or \"Product Manager at Acme Corp\"."
+                "**Could you try again? For example: \"Acme Corp\" or \"Product Manager at Acme Corp\".**"
             )
 
         company_record = None
@@ -166,11 +167,11 @@ class InsightsAgent:
         state.phase = Phase.CONFIRMING
 
         if state.role_title and state.company_name:
-            return f"I found \"{state.role_title}\" at {state.company_name} — is that the one you're asking about?"
+            return f"I found \"{state.role_title}\" at {state.company_name} — **is that the one you're asking about?**"
         elif state.role_title:
-            return f"I found \"{state.role_title}\" — is that the role you're asking about?"
+            return f"I found \"{state.role_title}\" — **is that the role you're asking about?**"
         else:
-            return f"I found {state.company_name} in our database — is that the company you're asking about?"
+            return f"I found {state.company_name} in our database — **is that the company you're asking about?**"
 
     def _handle_confirming(self, state: ConversationState, user_text: str) -> str:
         low = user_text.lower().strip()
@@ -186,8 +187,8 @@ class InsightsAgent:
             state.role_record_id = None
             state.role_title = None
             return (
-                "Got it — could you give me a bit more detail? "
-                "For example the full role title or the exact company name."
+                "Got it — **could you give me a bit more detail? "
+                "For example the full role title or the exact company name.**"
             )
 
         if not affirmative:
@@ -213,12 +214,12 @@ class InsightsAgent:
             if mode == "free":
                 return (
                     f"Tell me what you already know about \"{entity}\" from your research or conversations. "
-                    "Share what you've learned and I'll let you know what we have."
+                    "**Share what you've learned and I'll let you know what we have.**"
                 )
             else:  # pro
                 return (
                     f"Great — before I pull up what we have on {entity}, "
-                    "what have you already learned from your conversations or research?"
+                    "**what have you already learned from your conversations or research?**"
                 )
 
         # PREMIUM: immediately show brief synopsis
@@ -261,7 +262,7 @@ class InsightsAgent:
                     "3. Do NOT reveal any details we have about the role.\n"
                     "4. Ask ONE natural follow-up question to learn more.\n"
                     "5. In a final sentence, mention they can upgrade to Pro to see what we know.\n"
-                    "Keep it short and conversational. No markdown."
+                    "Bold only the question sentence using **double asterisks**. No other markdown."
                 )
                 return self._call_claude([{"role": "user", "content": ack_prompt}])
 
@@ -278,7 +279,7 @@ class InsightsAgent:
                     "1. Warmly thank them for the insight in 1 sentence.\n"
                     "2. Ask ONE focused follow-up question to gather more insider info "
                     "(culture, hiring process, leadership, recent changes).\n"
-                    "Keep it short and friendly. No markdown."
+                    "Bold only the question sentence using **double asterisks**. No other markdown."
                 )
                 return self._call_claude([{"role": "user", "content": ack_prompt}])
 
@@ -289,13 +290,17 @@ class InsightsAgent:
             f"The user just shared this about {entity}: \"{user_text}\"\n\n"
             "Acknowledge what they shared in 1 sentence (be specific and appreciative), "
             "then transition naturally into the synopsis below. "
-            "Do not use markdown.\n\n"
+            "Bold only the question sentence using **double asterisks**. No other markdown.\n\n"
             f"Synopsis:\n{synopsis}"
         )
         return self._call_claude([{"role": "user", "content": ack_prompt}])
 
     def _handle_followup(self, state: ConversationState, user_text: str) -> str:
         """Answer follow-up questions, extract data, and probe gaps conversationally."""
+        # Premium: list all open/closed roles if that's what they're asking
+        if state.mode == "premium" and state.company_record_id and self._is_roles_list_intent(user_text):
+            return self._list_company_roles(state)
+
         # Check if they're asking about a new entity — reset and re-identify if so
         parsed = self._parse_company_and_role(user_text)
         new_company = parsed.get("company")
@@ -308,9 +313,15 @@ class InsightsAgent:
             and new_company.lower() != current_company
             and new_company.lower() not in current_company
         )
+        # Role switch: new role mentioned, and either no company in message or it's the same company
+        same_company_mentioned = (
+            new_company
+            and (new_company.lower() == current_company or new_company.lower() in current_company)
+        )
         switching_role = (
             new_role
-            and not new_company               # role-only switch (same company)
+            and not switching_company
+            and (not new_company or same_company_mentioned)
             and new_role.lower() != current_role
         )
 
@@ -361,7 +372,38 @@ class InsightsAgent:
                 + ". Frame it as a conversational question, not a form field prompt."
             )
 
+        # Premium + role: ensure Claude always gives a brief overview of what we know
+        if state.mode == "premium" and role_fields:
+            key_facts = {k: v for k, v in merged_role.items() if v and k in ("Title", "HM Name", "HQ Location", "Find", "Notes")}
+            system = system + (
+                "\n\nIMPORTANT: You are discussing the role below with a premium member. "
+                "Always reference what we know about it (briefly) before asking your question.\n"
+                f"ROLE DATA: {json.dumps(key_facts)}"
+            )
+
         return self._call_claude(state.messages, system=system)
+
+    # ------------------------------------------------------------------
+    # Roles listing (premium only)
+    # ------------------------------------------------------------------
+
+    def _is_roles_list_intent(self, text: str) -> bool:
+        low = text.lower()
+        return any(p in low for p in [
+            "what roles", "which roles", "list roles", "any roles", "open roles",
+            "roles do you have", "roles you have", "tell me about the roles",
+            "roles in our", "roles in the", "what positions", "any positions",
+            "open positions", "what openings", "any openings",
+        ])
+
+    def _list_company_roles(self, state: ConversationState) -> str:
+        from prompts.synopsis import build_roles_listing_prompt
+        co_rec = self.db.get_company(state.company_record_id)
+        roles = self.db.get_company_roles(state.company_record_id)
+        open_roles = [r for r in roles if (r["fields"].get("Status") or "open").lower() != "closed"]
+        closed_roles = [r for r in roles if (r["fields"].get("Status") or "").lower() == "closed"]
+        prompt = build_roles_listing_prompt(co_rec or {}, open_roles, closed_roles)
+        return self._call_claude([{"role": "user", "content": prompt}])
 
     # ------------------------------------------------------------------
     # Synopsis generators
