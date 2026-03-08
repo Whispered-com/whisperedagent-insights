@@ -124,6 +124,72 @@ Rules:
 {{"role":{{"Find":null,"Notes":null,"Location":null,"Compensation":null}},"company":{{"Confidential Notes":null}}}}"""
 
 
+# ── Structured field schemas ──────────────────────────────────────────────────
+
+ROLE_NOTES_SCHEMA = """\
+Scope & Responsibilities: <what the role owns and does day-to-day>
+Reports To: <manager title or name>
+Team Size: <direct reports and/or broader team>
+Hiring Manager: <name / title>
+Remote/Hybrid/In-Office: <work arrangement and location>
+Key Skills: <top 3-5 skills / experience requirements>
+Reason for Hire: <why they're making this hire now>
+Interview Panel: <who's involved in interviews / process stages>\
+"""
+
+COMPANY_NOTES_SCHEMA = """\
+Status: ARR ~$Xm, ~Y employees, growth rate Z%, <competitive dynamics>, last raise <series / date>, runway <X months>
+GTM Motion: <inbound/outbound mix>, ACV $X, buyers <personas>, GRR X% / NRR X%
+GTM Org: <structure>, function leads: <names/titles>, GTM decisions: <CRO-led / CEO-driven>
+CEO/Culture: CEO <name> — <reputation/style>, culture: <description>\
+"""
+
+
+def build_structured_merge_prompt(schema_type: str, existing: str, new_info: str) -> str:
+    """
+    Return a prompt that asks Claude to merge *new_info* into *existing*
+    structured notes, preserving the correct schema and eliminating duplicates.
+
+    schema_type: "role_notes" | "company_notes"
+    existing:    current field value (may be empty or unstructured)
+    new_info:    freshly extracted text to merge in
+    """
+    if schema_type == "role_notes":
+        schema = ROLE_NOTES_SCHEMA
+        label = "Role.Notes"
+    else:
+        schema = COMPANY_NOTES_SCHEMA
+        label = "Company.Confidential Notes"
+
+    existing_block = existing.strip() if existing else "(empty)"
+
+    return f"""You are updating the {label} field for a tracked company/role.
+
+TARGET SCHEMA (output must follow this exact structure):
+---
+{schema}
+---
+
+EXISTING CONTENT:
+---
+{existing_block}
+---
+
+NEW INFORMATION TO MERGE IN:
+---
+{new_info.strip()}
+---
+
+Instructions:
+- Produce a clean merged version that follows the schema above exactly.
+- Each line starts with the label in bold (e.g. "Scope & Responsibilities:") followed by the value.
+- Incorporate all new information — do NOT drop details from existing content unless the new info supersedes them.
+- Remove exact duplicates; keep the most specific / recent value when there are conflicts.
+- If a section has no information (existing or new), write "Unknown" as the value.
+- Be concise: one line per section unless the content genuinely needs more.
+- Return ONLY the merged field content — no preamble, no JSON, no markdown fences."""
+
+
 # ── Follow-up question prompt ─────────────────────────────────────────────────
 
 def build_gap_question_prompt(role_name: str, company_name: str,

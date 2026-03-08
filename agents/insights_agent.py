@@ -31,6 +31,7 @@ from prompts.synopsis import build_company_synopsis_prompt, build_role_synopsis_
 from prompts.data_collection import (
     build_data_extraction_prompt,
     build_gap_question_prompt,
+    build_structured_merge_prompt,
     get_role_gaps,
     get_company_gaps,
 )
@@ -400,13 +401,40 @@ class InsightsAgent:
 
         for field, value in (extracted.get("role") or {}).items():
             if value:
-                existing = updates["role"].get(field, "")
-                updates["role"][field] = (existing + "\n" + value).strip() if existing else value
+                if field == "Notes":
+                    existing = updates["role"].get("Notes", "")
+                    merged = self._structured_merge("role_notes", existing, value)
+                    updates["role"]["Notes"] = merged
+                else:
+                    existing = updates["role"].get(field, "")
+                    updates["role"][field] = (existing + "\n" + value).strip() if existing else value
 
         for field, value in (extracted.get("company") or {}).items():
             if value:
-                existing = updates["company"].get(field, "")
-                updates["company"][field] = (existing + "\n" + value).strip() if existing else value
+                if field == "Confidential Notes":
+                    existing = updates["company"].get("Confidential Notes", "")
+                    merged = self._structured_merge("company_notes", existing, value)
+                    updates["company"]["Confidential Notes"] = merged
+                else:
+                    existing = updates["company"].get(field, "")
+                    updates["company"][field] = (existing + "\n" + value).strip() if existing else value
+
+    def _structured_merge(self, schema_type: str, existing: str, new_info: str) -> str:
+        """
+        Merge *new_info* into *existing* using the structured schema for the given type.
+        Falls back to simple concatenation if the Claude call fails.
+        """
+        prompt = build_structured_merge_prompt(schema_type, existing, new_info)
+        try:
+            result = self._call_claude(
+                [{"role": "user", "content": prompt}],
+                max_tokens=512,
+                system="You are a concise database editor. Follow instructions exactly.",
+            )
+            return result.strip()
+        except Exception:
+            logger.debug("structured merge failed; falling back to concat")
+            return (existing + "\n" + new_info).strip() if existing else new_info
 
     # ------------------------------------------------------------------
     # Claude helpers
