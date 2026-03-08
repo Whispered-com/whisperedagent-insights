@@ -130,8 +130,11 @@ class InsightsAgent:
         company_record = None
         role_record = None
 
-        if role_title and company_name:
-            role_record, company_record = self.db.find_role_for_company(role_title, company_name)
+        # Fall back to the company already in state if the message didn't name one
+        effective_company = company_name or state.company_name
+
+        if role_title and effective_company:
+            role_record, company_record = self.db.find_role_for_company(role_title, effective_company)
         elif role_title:
             role_record = self.db.find_role(role_title)
         elif company_name:
@@ -311,13 +314,20 @@ class InsightsAgent:
             and new_role.lower() != current_role
         )
 
-        if switching_company or switching_role:
+        if switching_company:
             state.phase = Phase.IDENTIFY
             state.company_record_id = None
             state.company_name = None
             state.role_record_id = None
             state.role_title = None
             state.suggested_updates = {}
+            return self._handle_identify(state, user_text)
+
+        if switching_role:
+            # Keep company context — user is asking about a different role at the same company
+            state.phase = Phase.IDENTIFY
+            state.role_record_id = None
+            state.role_title = None
             return self._handle_identify(state, user_text)
 
         # Extract structured data from what the user said (silent — never raises)
