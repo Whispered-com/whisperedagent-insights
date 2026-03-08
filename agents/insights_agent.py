@@ -409,15 +409,22 @@ class InsightsAgent:
             airtable_company_fields = (co_rec or {}).get("fields", {})
 
         for field, value in (extracted.get("role") or {}).items():
-            if value:
-                if field == "Notes":
-                    # Prefer already-merged suggested value; fall back to Airtable
-                    existing = updates["role"].get("Notes") or airtable_role_fields.get("Notes", "")
-                    merged = self._structured_merge("role_notes", existing, value)
-                    updates["role"]["Notes"] = merged
-                else:
-                    existing = str(updates["role"].get(field, "") or "")
-                    updates["role"][field] = (existing + "\n" + value).strip() if existing else value
+            if value is None:
+                continue
+            if field == "Compensation":
+                # Number field in Airtable — store as int, ignore non-numeric values
+                try:
+                    updates["role"]["Compensation"] = int(value)
+                except (TypeError, ValueError):
+                    pass
+            elif field == "Notes":
+                # Prefer already-merged suggested value; fall back to Airtable
+                existing = updates["role"].get("Notes") or airtable_role_fields.get("Notes", "")
+                merged = self._structured_merge("role_notes", existing, value)
+                updates["role"]["Notes"] = merged
+            else:
+                existing = str(updates["role"].get(field, "") or "")
+                updates["role"][field] = (existing + "\n" + value).strip() if existing else value
 
         for field, value in (extracted.get("company") or {}).items():
             if value:

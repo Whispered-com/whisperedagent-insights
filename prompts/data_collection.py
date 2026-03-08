@@ -106,9 +106,9 @@ def build_data_extraction_prompt(user_text: str, role_name: str, company_name: s
 
 Role fields (only include if explicitly mentioned):
 - Find: who leads the hiring search (internal sponsor, recruiter name/firm, helpful community contacts)
-- Notes: role scope, responsibilities, reporting line, team size, hiring manager name, key skills, reason for hire, interview process / panel
+- Notes: role scope, responsibilities, reporting line, team size, hiring manager name, key skills, reason for hire, interview process / panel. Also capture any qualitative comp context here (e.g. "comp is reportedly low" or "strong equity component").
 - Location: where based, remote/hybrid/in-office
-- Compensation: base + bonus / OTE in USD
+- Compensation: INTEGER only — the annual USD cash total (base + bonus / OTE) as a plain number with no symbols, words, or punctuation (e.g. 180000). If the user gives a range use the midpoint. If the figure is vague or only qualitative (e.g. "low", "competitive") set this to null and capture the context in Notes instead.
 
 Company field (only include if mentioned):
 - Confidential Notes: any non-public intel — ARR, growth, GTM strategy, org structure, leadership, CEO, culture
@@ -119,6 +119,7 @@ Rules:
 - Only populate fields where the user actually shared relevant info
 - Combine related details into the right field (e.g. "HM is Sarah, team of 12" both go in Notes)
 - For Confidential Notes collect all company intel in one string
+- Compensation must be a plain integer or null — never a string
 - Return ONLY valid JSON, nothing else
 
 {{"role":{{"Find":null,"Notes":null,"Location":null,"Compensation":null}},"company":{{"Confidential Notes":null}}}}"""
@@ -180,7 +181,7 @@ Instructions:
 - Each line starts with the label in bold (e.g. "Scope & Responsibilities:") followed by the value.
 - Incorporate all new information — do NOT drop details from existing content unless the new info supersedes them.
 - Remove exact duplicates; keep the most specific / recent value when there are conflicts.
-- If a section has no information (existing or new), write "Unknown" as the value.
+- If a section has no information at all (existing or new), omit that line entirely — do NOT write "Unknown".
 - Be concise: one line per section unless the content genuinely needs more.
 - Return ONLY the merged field content — no preamble, no JSON, no markdown fences."""
 
