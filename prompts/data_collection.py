@@ -127,14 +127,9 @@ Rules:
 # ── Structured field schemas ──────────────────────────────────────────────────
 
 ROLE_NOTES_SCHEMA = """\
-Scope & Responsibilities: <what the role owns and does day-to-day>
-Reports To: <manager title or name>
-Team Size: <direct reports and/or broader team>
-Hiring Manager: <name / title>
-Remote/Hybrid/In-Office: <work arrangement and location>
-Key Skills: <top 3-5 skills / experience requirements>
-Reason for Hire: <why they're making this hire now>
-Interview Panel: <who's involved in interviews / process stages>\
+Scope: <responsibilities and team size>
+Criteria: <key skills, reason for hire, interview panel>
+Details: <location/remote/hybrid, hiring manager, reports to>\
 """
 
 COMPANY_NOTES_SCHEMA = """\
