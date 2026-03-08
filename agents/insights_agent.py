@@ -133,12 +133,13 @@ class InsightsAgent:
 
         company_record = None
         role_record = None
+        match_type = "none"
 
         # Fall back to the company already in state if the message didn't name one
         effective_company = company_name or state.company_name
 
         if role_title and effective_company:
-            role_record, company_record = self.db.find_role_for_company(role_title, effective_company)
+            role_record, company_record, match_type = self.db.find_role_for_company(role_title, effective_company)
         elif role_title:
             role_record = self.db.find_role(role_title)
         elif company_name:
@@ -149,16 +150,19 @@ class InsightsAgent:
             if linked:
                 company_record = self.db.get_company(linked[0])
 
-        # If we have a company but no role yet, try AI semantic matching against all company roles.
-        if not role_record and company_record and role_title:
+        # For weak/no DB matches, run AI semantic matching against all company roles.
+        # This catches vague queries ("RevOps") that may map to multiple roles and
+        # avoids silently picking the wrong one when there is genuine ambiguity.
+        if company_record and role_title and match_type in ("notes", "none"):
             company_roles = self.db.get_company_roles(company_record["id"])
             if company_roles:
                 matches = self._semantic_role_match(role_title, company_roles)
-                if len(matches) == 1:
-                    role_record = matches[0]
-                elif len(matches) > 1:
-                    # Multiple plausible matches — ask the user to pick one.
+                if len(matches) > 1:
                     return self._ask_disambiguate(state, company_record, matches)
+                elif len(matches) == 1:
+                    role_record = matches[0]
+                    match_type = "semantic"
+                # len == 0: keep whatever the DB found (notes hit) or nothing
 
         if not role_record and not company_record:
             entity = company_name or role_title
@@ -733,10 +737,12 @@ class InsightsAgent:
         prompt = (
             f'A user is looking for: "{role_query}"\n\n'
             f'Available roles:\n' + "\n".join(summaries) + "\n\n"
-            f'Which indices match? Consider synonyms and related terms '
-            f'(e.g. "RevOps" may match "GTM Strategy/Ops", "Revenue Operations", "GTM AI", etc.). '
-            f'Return a JSON array of matching integer indices. '
-            f'Return [] if nothing fits. Valid JSON only — no preamble.'
+            f'Which indices plausibly match? Be INCLUSIVE — if a query is broad or uses '
+            f'an umbrella term (e.g. "RevOps", "GTM", "Sales Ops") return ALL roles that '
+            f'could reasonably be what the user meant, even if one feels like a stronger '
+            f'match than another. Only exclude roles that are clearly unrelated. '
+            f'Return a JSON array of integer indices. Return [] only if nothing fits at all. '
+            f'Valid JSON only — no preamble.'
         )
         try:
             raw = self._call_claude([{"role": "user", "content": prompt}], max_tokens=32)

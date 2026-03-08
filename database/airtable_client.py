@@ -161,9 +161,17 @@ class AirtableClient:
             logger.exception("find_role failed for %r", role_title)
             return None
 
-    def find_role_for_company(self, role_title: str, company_name: str) -> tuple[Optional[dict], Optional[dict]]:
+    def find_role_for_company(
+        self, role_title: str, company_name: str
+    ) -> tuple[Optional[dict], Optional[dict], str]:
         """
         Find a role by title scoped to a company.
+
+        Returns (role_record, company_record, match_type) where match_type is one of:
+          "title"  – strong: title substring matched directly
+          "fuzzy"  – strong: fuzzy company name + title match
+          "notes"  – weak: matched via Notes field content
+          "none"   – no role found (role_record is None)
 
         Uses ARRAYJOIN({Company}) in the formula which — in Airtable's filterByFormula
         API — resolves linked records to their display (primary-field) values, i.e.
@@ -192,7 +200,7 @@ class AirtableClient:
                     role = self.find_role(role_title, company_id=co["id"])
                     if role:
                         logger.info("find_role_for_company fuzzy hit: %r at %r", role_title, co["fields"].get("Company Name"))
-                        return role, co
+                        return role, co, "fuzzy"
 
                 # Fuzzy fallback 2: search Notes field at this company for the role keywords.
                 try:
@@ -207,18 +215,18 @@ class AirtableClient:
                         notes_records = self.roles.all(formula=notes_formula)
                         if notes_records:
                             logger.info("find_role_for_company notes hit: %r at %r", role_title, company_name)
-                            return notes_records[0], co_for_notes
+                            return notes_records[0], co_for_notes, "notes"
                 except Exception:
                     logger.debug("find_role_for_company notes search failed for %r / %r", role_title, company_name)
 
                 # Return the company even when no role found — callers use it for semantic matching / fallback.
-                return None, co
+                return None, co, "none"
 
             role = records[0]
-            return role, co
+            return role, co, "title"
         except Exception:
             logger.exception("find_role_for_company failed for %r / %r", role_title, company_name)
-            return None, None
+            return None, None, "none"
 
     def find_role_by_id(self, record_id: str) -> Optional[dict]:
         try:
