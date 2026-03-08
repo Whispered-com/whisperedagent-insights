@@ -71,7 +71,7 @@ def get_role_gaps(role_fields: dict) -> list[tuple[str, str]]:
     return [
         (field, desc)
         for field, desc in ROLE_GAP_DESCRIPTIONS.items()
-        if not (role_fields.get(field) or "").strip()
+        if not str(role_fields.get(field) or "").strip()
     ]
 
 
