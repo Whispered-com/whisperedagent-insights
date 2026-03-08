@@ -170,14 +170,11 @@ class InsightsAgent:
             return f"I found {state.company_name} in our database — is that the company you're asking about?"
 
     def _handle_confirming(self, state: ConversationState, user_text: str) -> str:
-        low = user_text.lower()
-        affirmative = any(w in low for w in (
-            "yes", "yeah", "yep", "yup", "correct", "right", "that's it",
-            "exactly", "sure", "ok", "okay", "confirm", "go ahead", "yea",
-        ))
-        negative = any(w in low for w in (
-            "no", "nope", "wrong", "not that", "different", "other", "another",
-        ))
+        low = user_text.lower().strip()
+        words = set(low.split())
+        affirmative = bool(words & {"y", "yes", "yeah", "yep", "yup", "yea", "sure", "ok", "okay", "correct",
+                                    "right", "exactly", "confirm"}) or "that's it" in low or "go ahead" in low
+        negative = bool(words & {"n", "no", "nope", "wrong", "different", "other", "another"}) or "not that" in low
 
         if negative:
             state.phase = Phase.IDENTIFY
