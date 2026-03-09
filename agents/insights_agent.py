@@ -441,11 +441,48 @@ class InsightsAgent:
         )
         return self._call_claude([{"role": "user", "content": ack_prompt}])
 
+    def _is_continuation_reply(self, state: ConversationState, user_text: str) -> bool:
+        """
+        Return True if user_text is a direct reply to the agent's last question rather
+        than a request about a new company or role.  Prevents conversational answers
+        like "i understand they are flexible on location" from being misread as a
+        company-switch to "location".
+        """
+        last_agent = ""
+        for msg in reversed(state.messages):
+            if msg.get("role") == "assistant":
+                last_agent = msg["content"][:400]
+                break
+        if not last_agent:
+            return False
+        prompt = (
+            f'The assistant just said: "{last_agent}"\n'
+            f'The user replied: "{user_text}"\n\n'
+            f'Is the user directly answering/continuing the assistant\'s question, '
+            f'or are they asking about a completely new company or role?\n'
+            f'Reply with exactly one word: "reply" or "new_request".'
+        )
+        try:
+            raw = self._call_claude([{"role": "user", "content": prompt}], max_tokens=5)
+            return raw.strip().lower().startswith("reply")
+        except Exception:
+            return False
+
     def _handle_followup(self, state: ConversationState, user_text: str) -> str:
         """Answer follow-up questions, extract data, and probe gaps conversationally."""
         # Check if they're asking about a new entity — reset and re-identify if so
         # NOTE: this must run BEFORE the roles-listing check so that "roles we have at
         # MaintainX" (while currently discussing 11x) switches company context first.
+        #
+        # Guard: if the user is clearly replying to the agent's last question (e.g.
+        # answering "are they remote-friendly?" with "yes, flexible on location") skip
+        # entity-switching entirely so conversational answers aren't misread as new
+        # company/role requests.
+        if self._is_continuation_reply(state, user_text):
+            # Still extract any data the user shared, then continue the conversation.
+            self._extract_and_accumulate(state, user_text)
+            return self._call_claude(state.messages, system=self._build_followup_system(state))
+
         parsed = self._parse_company_and_role(user_text)
         new_company = parsed.get("company")
         new_role = parsed.get("role")
@@ -517,7 +554,10 @@ class InsightsAgent:
         # Extract structured data from what the user said (silent — never raises)
         self._extract_and_accumulate(state, user_text)
 
-        # Determine remaining gaps to guide the next question
+        return self._call_claude(state.messages, system=self._build_followup_system(state))
+
+    def _build_followup_system(self, state: ConversationState) -> str:
+        """Build the dynamic system prompt for follow-up turns based on current state gaps."""
         role_fields = {}
         company_fields = {}
         if state.role_record_id:
@@ -554,7 +594,7 @@ class InsightsAgent:
                 f"ROLE DATA: {json.dumps(key_facts)}"
             )
 
-        return self._call_claude(state.messages, system=system)
+        return system
 
     # ------------------------------------------------------------------
     # Link helpers
