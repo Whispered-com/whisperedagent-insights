@@ -927,7 +927,13 @@ class InsightsAgent:
         raw = self._call_claude([{"role": "user", "content": prompt}])
         try:
             cleaned = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-            return json.loads(cleaned)
+            data = json.loads(cleaned)
+            # Normalise: model sometimes returns a list instead of a string
+            for key in ("company", "role"):
+                val = data.get(key)
+                if isinstance(val, list):
+                    data[key] = val[0] if val else None
+            return data
         except (json.JSONDecodeError, AttributeError):
             return {"company": None, "role": None}
 
