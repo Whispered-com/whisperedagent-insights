@@ -797,6 +797,19 @@ class InsightsAgent:
         from prompts.synopsis import build_roles_listing_prompt
         co_rec = self.db.get_company(state.company_record_id)
         roles = self.db.get_company_roles(state.company_record_id)
+
+        # Resolve the actual company name for each role from its linked record,
+        # so a role at PayScale or AnyScale is never labelled as "Scale".
+        company_cache: dict[str, str] = {}
+        for role in roles:
+            linked_ids = role.get("fields", {}).get("Company", [])
+            if linked_ids:
+                cid = linked_ids[0]
+                if cid not in company_cache:
+                    c = self.db.get_company(cid)
+                    company_cache[cid] = (c["fields"].get("Company Name", "") if c else "")
+                role["fields"]["_company_name"] = company_cache[cid]
+
         open_roles = [r for r in roles if self._field(r["fields"], "Status", "open").lower() != "closed"]
         closed_roles = [r for r in roles if self._field(r["fields"], "Status").lower() == "closed"]
         company_url = state.company_domain or ""

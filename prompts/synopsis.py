@@ -270,8 +270,10 @@ def build_roles_listing_prompt(company: dict, open_roles: list, closed_roles: li
         title = rf.get("Title", "Untitled")
         app_page = (rf.get("App Page") or "").strip()
         title_ref = f"[{title}]({app_page})" if app_page else title
-        # Always include the company name so attribution is unambiguous
-        parts = [f"{title_ref} at {company_name}"]
+        # Use the role's own resolved company name (set by _list_company_roles),
+        # falling back to the queried company_name only when not available.
+        role_company = rf.get("_company_name") or company_name
+        parts = [f"{title_ref} at {role_company}"]
         if rf.get("Function"):
             parts.append(f"Function: {rf['Function']}")
         if rf.get("HM Name"):
