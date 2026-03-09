@@ -569,8 +569,10 @@
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
         const res = await fetch(url, options);
-        if (res.ok || res.status < 500) return res;
-        // 5xx — server still spinning up, retry
+        // 500 = application error (e.g. Claude API failure) — return immediately so
+        // the caller can read the error body and show a meaningful message.
+        // Only retry on 502/503/504 which mean the server itself is unavailable.
+        if (res.ok || res.status === 500 || res.status < 500) return res;
         if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 2 ** attempt * 500));
       } catch (err) {
         if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 2 ** attempt * 500));
@@ -595,7 +597,7 @@
       enableChat();
     } catch (err) {
       removeTyping();
-      appendMsg("Could not reach the server. Please refresh.", "error");
+      appendMsg("Could not reach the server. Please check your connection and refresh.", "error");
     }
   }
 
@@ -617,7 +619,7 @@
       });
       const data = await res.json();
       removeTyping();
-      appendMsg(data.reply || data.error || "No response.", "agent");
+      appendMsg(data.reply || data.error || "No response.", res.ok ? "agent" : "error");
 
       // Update the suggested-updates panel if the server returned updates
       if (data.suggested_updates) {
@@ -625,7 +627,7 @@
       }
     } catch (err) {
       removeTyping();
-      appendMsg("Could not reach the server. Please refresh.", "error");
+      appendMsg("Could not reach the server. Please check your connection and try again.", "error");
     }
 
     sendBtn.disabled = false;
