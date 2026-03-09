@@ -433,31 +433,9 @@ class InsightsAgent:
 
     def _handle_followup(self, state: ConversationState, user_text: str) -> str:
         """Answer follow-up questions, extract data, and probe gaps conversationally."""
-        # Role listing intent — tier-appropriate response
-        if state.company_record_id and self._is_roles_list_intent(user_text):
-            if state.mode == "premium":
-                return self._list_company_roles(state)
-            else:
-                roles = self.db.get_company_roles(state.company_record_id)
-                count = len(roles)
-                noun = "role" if count == 1 else "roles"
-                co_ref = self._company_ref(state)
-                if not count:
-                    return f"I don't have any roles tracked for {co_ref} at the moment."
-                if state.mode == "free":
-                    return (
-                        f"We do have {count} {noun} tracked for {co_ref}, "
-                        "but the details are only available on Pro and above. "
-                        "**Upgrade to Pro to unlock the role titles and hiring details.**"
-                    )
-                # pro
-                return (
-                    f"We do have {count} {noun} tracked for {co_ref}. "
-                    "**Upgrade to Premium to see the full breakdown — "
-                    "or is there a specific role you've already come across?**"
-                )
-
         # Check if they're asking about a new entity — reset and re-identify if so
+        # NOTE: this must run BEFORE the roles-listing check so that "roles we have at
+        # MaintainX" (while currently discussing 11x) switches company context first.
         parsed = self._parse_company_and_role(user_text)
         new_company = parsed.get("company")
         new_role = parsed.get("role")
@@ -501,6 +479,30 @@ class InsightsAgent:
             state.role_record_id = None
             state.role_title = None
             return self._handle_identify(state, user_text)
+
+        # Role listing intent — now safe to check because company context is confirmed correct
+        if state.company_record_id and self._is_roles_list_intent(user_text):
+            if state.mode == "premium":
+                return self._list_company_roles(state)
+            else:
+                roles = self.db.get_company_roles(state.company_record_id)
+                count = len(roles)
+                noun = "role" if count == 1 else "roles"
+                co_ref = self._company_ref(state)
+                if not count:
+                    return f"I don't have any roles tracked for {co_ref} at the moment."
+                if state.mode == "free":
+                    return (
+                        f"We do have {count} {noun} tracked for {co_ref}, "
+                        "but the details are only available on Pro and above. "
+                        "**Upgrade to Pro to unlock the role titles and hiring details.**"
+                    )
+                # pro
+                return (
+                    f"We do have {count} {noun} tracked for {co_ref}. "
+                    "**Upgrade to Premium to see the full breakdown — "
+                    "or is there a specific role you've already come across?**"
+                )
 
         # Extract structured data from what the user said (silent — never raises)
         self._extract_and_accumulate(state, user_text)
@@ -576,9 +578,11 @@ class InsightsAgent:
         low = text.lower()
         return any(p in low for p in [
             "what roles", "which roles", "list roles", "any roles", "open roles",
-            "roles do you have", "roles you have", "tell me about the roles",
-            "roles in our", "roles in the", "what positions", "any positions",
-            "open positions", "what openings", "any openings",
+            "roles do you have", "roles you have", "roles we have", "tell me roles",
+            "tell me about the roles", "tell me the roles",
+            "roles in our", "roles in the", "roles at", "roles for",
+            "what positions", "any positions", "open positions",
+            "what openings", "any openings",
         ])
 
     def _list_company_roles(self, state: ConversationState) -> str:
