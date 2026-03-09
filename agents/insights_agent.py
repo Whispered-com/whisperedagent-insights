@@ -162,14 +162,24 @@ class InsightsAgent:
                     # Only one role at the company — proceed with it.
                     role_record = company_roles[0]
                 else:
-                    # Multiple roles — filter out clearly unrelated ones, then
-                    # disambiguate if 2+ remain (or use the sole survivor directly).
-                    candidates = self._semantic_role_filter(role_title, company_roles)
-                    if len(candidates) > 1:
-                        return self._ask_disambiguate(state, company_record, candidates)
-                    elif len(candidates) == 1:
-                        role_record = candidates[0]
-                    # 0 candidates: keep any notes hit, or fall through to not-found
+                    # Try a direct title substring match first (handles "head of GTM AI" → exact role).
+                    query_lower = role_title.lower()
+                    title_hits = [
+                        r for r in company_roles
+                        if query_lower in self._field(r.get("fields", {}), "Title").lower()
+                        or self._field(r.get("fields", {}), "Title").lower() in query_lower
+                    ]
+                    if len(title_hits) == 1:
+                        role_record = title_hits[0]
+                    else:
+                        # Multiple roles — filter out clearly unrelated ones, then
+                        # disambiguate if 2+ remain (or use the sole survivor directly).
+                        candidates = self._semantic_role_filter(role_title, company_roles)
+                        if len(candidates) > 1:
+                            return self._ask_disambiguate(state, company_record, candidates)
+                        elif len(candidates) == 1:
+                            role_record = candidates[0]
+                        # 0 candidates: keep any notes hit, or fall through to not-found
 
         if not role_record and not company_record:
             entity = company_name or role_title
