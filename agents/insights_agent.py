@@ -227,9 +227,10 @@ class InsightsAgent:
         for i, r in enumerate(candidates, 1):
             rf = r.get("fields", {})
             title = rf.get("Title", "Untitled")
-            fn = rf.get("Function", "")
-            line = f"{i}. **{title}**" + (f" ({fn})" if fn else "")
-            lines.append(line)
+            app_page = (rf.get("App Page") or "").strip()
+            # Link the title to the App Page when available; always bold it.
+            title_ref = f"[{title}]({app_page})" if app_page else title
+            lines.append(f"{i}. **{title_ref}**")
 
         return (
             f"I found a couple of roles at {co_ref} that could be a match — "
@@ -281,10 +282,13 @@ class InsightsAgent:
         if not chosen:
             # Couldn't parse — re-ask
             co_ref = self._company_ref(state)
-            lines = [
-                f"{i}. **{r['fields'].get('Title', 'Untitled')}**"
-                for i, r in enumerate(candidates, 1)
-            ]
+            lines = []
+            for i, r in enumerate(candidates, 1):
+                rf = r.get("fields", {})
+                title = rf.get("Title", "Untitled")
+                app_page = (rf.get("App Page") or "").strip()
+                title_ref = f"[{title}]({app_page})" if app_page else title
+                lines.append(f"{i}. **{title_ref}**")
             return (
                 "Sorry, I didn't catch which one — "
                 f"**could you pick a number or name from the list?**\n\n"
