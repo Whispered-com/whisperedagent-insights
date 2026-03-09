@@ -211,9 +211,17 @@ HG6M Outlook: {cf.get('HG6M', 'N/A')}
         can_ask_more = ""
 
     if top_gap and mode in ("pro", "premium"):
-        ending_instruction = f"End with ONE natural conversational question that could surface: {top_gap}. Do NOT make it sound like a form field."
+        ending_instruction = (
+            f"You MUST end with ONE question specifically aimed at surfacing: {top_gap}. "
+            f"Frame it as a natural, conversational question — not a form field. "
+            f"Do NOT ask why the user wants the role or anything about their personal motivations."
+        )
     else:
-        ending_instruction = "End with ONE natural question asking what they've learned from their own conversations."
+        ending_instruction = (
+            "End with ONE question asking what they know about the hiring process, timeline, "
+            "or how the search is being run. Do NOT ask why the user wants the role or "
+            "anything about their personal background or motivations."
+        )
 
     link_parts = []
     if role_url:

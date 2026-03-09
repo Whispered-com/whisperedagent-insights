@@ -42,7 +42,7 @@ logger = logging.getLogger(__name__)
 CLAUDE_MODEL = os.environ.get("CLAUDE_MODEL", "claude-sonnet-4-6")
 
 SYSTEM_PROMPT = """You are the Insights agent for a professional community platform that tracks companies and open roles.
-Your goal is to help community members and to learn from them — every conversation is a chance to fill in gaps in our knowledge.
+Your goal is to help community members and to learn from them — every conversation is a chance to fill in gaps in our knowledge about roles and companies.
 
 Guidelines:
 - Be warm, concise, and conversational. You are a knowledgeable colleague, not a database.
@@ -51,6 +51,7 @@ Guidelines:
 - Ask open, natural questions — not "what is the team size?" but "what's the team setup like there?"
 - Bold the sentence containing your question using **double asterisks like this?** — do not bold anything else.
 - Do not use any other markdown (no ##, no -, no _).
+- CRITICAL: Your questions must always be about gathering intelligence on the role or company — hiring process, team structure, hiring manager, location/remote setup, compensation, company health, GTM motion, culture. NEVER ask why the user wants the role, what draws them to it, or anything about their personal background, motivations, or career goals. Those are not your job.
 """
 
 
@@ -580,9 +581,16 @@ class InsightsAgent:
             top = [desc for _, desc in (role_gaps + company_gaps)][:2]
             system = (
                 SYSTEM_PROMPT
-                + "\n\nAfter your response, ask ONE natural follow-up question that could surface: "
+                + "\n\nYou MUST end with ONE question specifically aimed at surfacing: "
                 + "; ".join(top)
-                + ". Frame it as a conversational question, not a form field prompt."
+                + ". Frame it as a natural, conversational question — not a form field. "
+                "Do NOT ask why the user wants the role or anything about their personal motivations or background."
+            )
+        else:
+            system = (
+                SYSTEM_PROMPT
+                + "\n\nEnd with ONE question about the hiring process, timeline, or how the search is being run. "
+                "Do NOT ask why the user wants the role or anything about their personal background or motivations."
             )
 
         # Premium + role: ensure Claude always gives a brief overview of what we know
