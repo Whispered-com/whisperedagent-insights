@@ -18,6 +18,9 @@ dist/
 build/
 *.egg-info/
 
+# Node.js
+node_modules/
+
 # Misc
 .DS_Store
 *.log
