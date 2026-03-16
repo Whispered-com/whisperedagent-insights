@@ -63,6 +63,12 @@ function toDict(record) {
   return { id: record.id, fields: record.fields };
 }
 
+/** Returns false for roles whose Status contains "confidential" — these are never surfaced. */
+function _notConfidential(role) {
+  const status = ((role.fields || {}).Status || '').toLowerCase();
+  return !status.includes('confidential');
+}
+
 class AirtableClient {
   constructor({ apiKey, baseId, rolesTableName, companiesTableFallback, companyFieldName }) {
     this._apiKey = apiKey;
@@ -219,12 +225,12 @@ class AirtableClient {
           `)`
         );
         const records = await this.roles.select({ filterByFormula: formula }).all();
-        return records.map(toDict);
+        return records.map(toDict).filter(_notConfidential);
       }
       // Fallback: ID-based
       const formula = `FIND('${companyId}', ARRAYJOIN({Company}))`;
       const records = await this.roles.select({ filterByFormula: formula }).all();
-      return records.map(toDict);
+      return records.map(toDict).filter(_notConfidential);
     } catch (err) {
       console.warn(`getCompanyRoles failed for company '${companyId}': ${err.message}`);
       return [];
@@ -293,7 +299,8 @@ class AirtableClient {
         ? `AND(${titleFilter}, FIND('${companyId}', ARRAYJOIN({Company})))`
         : titleFilter;
       const records = await this.roles.select({ filterByFormula: formula }).all();
-      return records.length > 0 ? toDict(records[0]) : null;
+      const visible = records.map(toDict).filter(_notConfidential);
+      return visible.length > 0 ? visible[0] : null;
     } catch (err) {
       console.warn(`findRole failed for '${roleTitle}': ${err.message}`);
       return null;

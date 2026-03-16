@@ -164,6 +164,17 @@ class InsightsAgent {
         return this._askDisambiguateCompany(state, candidates);
       } else if (candidates.length === 1) {
         companyRecord = candidates[0];
+        // If the matched name differs from the query (fuzzy match only), confirm before proceeding.
+        const matchedName = this._field(companyRecord.fields, 'Company Name').toLowerCase();
+        const queriedName = companyName.toLowerCase();
+        const isFuzzyOnly = !matchedName.includes(queriedName) && !queriedName.includes(matchedName);
+        if (isFuzzyOnly) {
+          const confirmedName = this._field(companyRecord.fields, 'Company Name');
+          state.pendingCompanyId = companyRecord.id;
+          state.pendingCompanyName = confirmedName;
+          state.phase = Phase.CONFIRMING;
+          return `I don't have **${companyName}** in our database — did you mean **${confirmedName}**?`;
+        }
       }
       // else: no match — fall through to not-found handling below
     }
@@ -235,7 +246,32 @@ class InsightsAgent {
   }
 
   async _handleConfirming(state, userText) {
-    // Legacy phase handler — state should no longer enter CONFIRMING in normal flow.
+    // Fuzzy company match confirmation: user is responding to "did you mean X?"
+    if (state.pendingCompanyId) {
+      const lower = userText.toLowerCase().trim();
+      const confirmed = /\b(yes|yeah|yep|correct|right|that'?s?\s*(right|it|the one)?|sure|exactly|yup|affirmative)\b/.test(lower);
+      const denied = /\b(no|nope|not|wrong|different|other|never mind|nevermind)\b/.test(lower);
+
+      if (confirmed) {
+        const companyRecord = await this.db.getCompany(state.pendingCompanyId);
+        state.companyRecordId = companyRecord.id;
+        state.companyName = this._field(companyRecord.fields, 'Company Name');
+        const rawDomain = this._field(companyRecord.fields, 'Domain');
+        state.companyDomain = this._ensureHttps(rawDomain.trim());
+        state.pendingCompanyId = null;
+        state.pendingCompanyName = null;
+        return await this._dispatchAfterMatch(state, userText);
+      } else if (denied) {
+        state.pendingCompanyId = null;
+        state.pendingCompanyName = null;
+        state.phase = Phase.IDENTIFY;
+        return `No problem — which company were you looking for?`;
+      } else {
+        // Not clear — ask again
+        return `Just to confirm — did you mean **${state.pendingCompanyName}**?`;
+      }
+    }
+    // Legacy fallback
     return await this._dispatchAfterMatch(state, userText);
   }
 
@@ -382,6 +418,27 @@ class InsightsAgent {
 
   async _dispatchAfterMatch(state, userText) {
     const mode = state.mode;
+
+    // Confidential roles must never be shown regardless of tier — treat as not found.
+    if (state.roleRecordId) {
+      const roleRec = await this.db.findRoleById(state.roleRecordId);
+      if (this._isConfidential(roleRec)) {
+        state.roleRecordId = null;
+        state.roleTitle = null;
+        const coRef = this._companyRef(state);
+        if (coRef) {
+          return (
+            `I don't have that specific role in our database. ` +
+            `**Is there another role at ${coRef} you've come across, or would you like to share what you've learned?**`
+          );
+        }
+        return (
+          `I don't have that role in our database yet. ` +
+          '**Tell me what you know — which company is it at and what have you heard?**'
+        );
+      }
+    }
+
     const entityRef = this._roleRef(state) || this._companyRef(state);
 
     const rolesListIntent = (
@@ -1077,6 +1134,11 @@ class InsightsAgent {
   // ------------------------------------------------------------------
   // Claude helpers
   // ------------------------------------------------------------------
+
+  _isConfidential(role) {
+    const status = this._field((role || {}).fields, 'Status', '').toLowerCase();
+    return status.includes('confidential');
+  }
 
   _field(recordFields, key, defaultVal = '') {
     if (!recordFields || !(key in recordFields)) return defaultVal;
