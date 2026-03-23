@@ -221,22 +221,15 @@ class AirtableClient {
         // Use SEARCH (substring) — same approach as findRoleForCompany, which reliably works.
         // The exact-equality formula (LOWER(ARRAYJOIN({Company})) = 'name') silently returns
         // empty for linked record fields in some Airtable configurations.
+        // SEARCH (substring) — same approach as findRoleForCompany, which reliably works.
         const formula = `SEARCH(LOWER('${nameQ}'), LOWER(ARRAYJOIN({Company})))`;
         const records = await this.roles.select({ filterByFormula: formula }).all();
-        const dicts = records.map(toDict).filter(_notConfidential);
-        // Post-filter by actual record ID to prevent false substring matches
-        // (e.g. 'scale' matching 'PayScale'). The API returns Company as an array of record IDs.
-        return dicts.filter(r => {
-          const linked = (r.fields || {}).Company;
-          return Array.isArray(linked) ? linked.includes(companyId) : false;
-        });
+        return records.map(toDict).filter(_notConfidential);
       }
-      // Fallback: fetch all roles and filter by linked company record ID in JS
-      const allRecords = await this.roles.select().all();
-      return allRecords.map(toDict).filter(_notConfidential).filter(r => {
-        const linked = (r.fields || {}).Company;
-        return Array.isArray(linked) && linked.includes(companyId);
-      });
+      // Fallback: search by company ID substring (covers both text and linked-record fields)
+      const formula = `SEARCH('${companyId}', ARRAYJOIN({Company}))`;
+      const records = await this.roles.select({ filterByFormula: formula }).all();
+      return records.map(toDict).filter(_notConfidential);
     } catch (err) {
       console.warn(`getCompanyRoles failed for company '${companyId}': ${err.message}`);
       return [];
