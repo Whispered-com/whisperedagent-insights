@@ -65,7 +65,9 @@ function toDict(record) {
 
 /** Returns false for roles whose Status contains "confidential" — these are never surfaced. */
 function _notConfidential(role) {
-  const status = ((role.fields || {}).Status || '').toLowerCase();
+  const raw = (role.fields || {}).Status;
+  // Status may be a string ("Posted"), an array (["Posted"]), or null/undefined.
+  const status = (Array.isArray(raw) ? raw.join(',') : String(raw || '')).toLowerCase();
   return !status.includes('confidential');
 }
 
