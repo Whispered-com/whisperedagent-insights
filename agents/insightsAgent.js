@@ -1253,6 +1253,8 @@ class InsightsAgent {
       domain: null,
       find: null,
       notes: null,
+      location: null,
+      compensation: null,
       step: 'confirm',
       hasExistingCompany: true,
     };
@@ -1282,6 +1284,8 @@ class InsightsAgent {
       domain: null,
       find: null,
       notes: null,
+      location: null,
+      compensation: null,
       step: 'confirm',
       hasExistingCompany,
     };
@@ -1409,18 +1413,22 @@ class InsightsAgent {
 
     // ── Step: find_and_notes ──────────────────────────────────────────
     if (pe.step === 'find_and_notes') {
-      const extracted = await this._extractFindAndNotes(userText, pe.roleTitle);
+      const extracted = await this._extractRoleFields(userText, pe.roleTitle);
       pe.find = extracted.find || null;
       pe.notes = extracted.notes || null;
+      pe.location = extracted.location || null;
+      pe.compensation = extracted.compensation ?? null;
       pe.step = 'follow_up';
       return await this._generateNewRoleFollowUp(pe);
     }
 
     // ── Step: follow_up (one targeted question, then done) ─────────────
     if (pe.step === 'follow_up') {
-      const extracted = await this._extractFindAndNotes(userText, pe.roleTitle);
+      const extracted = await this._extractRoleFields(userText, pe.roleTitle);
       if (extracted.find) pe.find = pe.find ? `${pe.find}; ${extracted.find}` : extracted.find;
-      if (extracted.notes) pe.notes = pe.notes ? `${pe.notes} ${extracted.notes}` : extracted.notes;
+      if (extracted.notes) pe.notes = pe.notes ? `${pe.notes}\n${extracted.notes}` : extracted.notes;
+      if (extracted.location) pe.location = extracted.location;
+      if (extracted.compensation != null) pe.compensation = extracted.compensation;
       return this._saveNewEntity(state);
     }
 
@@ -1463,8 +1471,10 @@ class InsightsAgent {
    */
   async _generateNewRoleFollowUp(pe) {
     const known = [
-      pe.find  ? `How to find/apply: ${pe.find}` : null,
-      pe.notes ? `Details shared: ${pe.notes}` : null,
+      pe.find         ? `How to find/apply (Role - Find): ${pe.find}` : null,
+      pe.location     ? `Location (Role - Location): ${pe.location}` : null,
+      pe.compensation != null ? `Compensation (Role - Compensation): $${pe.compensation}` : null,
+      pe.notes        ? `Notes so far (Role - Notes):\n${pe.notes}` : null,
     ].filter(Boolean).join('\n');
 
     const prompt = (
@@ -1472,48 +1482,55 @@ class InsightsAgent {
       (known ? `What we know so far:\n${known}\n\n` : '\n') +
       'Write ONE warm follow-up question to gather the most important missing detail.\n' +
       'Priority (check what is NOT yet covered above and pick the top gap):\n' +
-      '1. Location / remote setup\n' +
-      '2. Scope — responsibilities or team size\n' +
-      '3. Criteria — reason for hire or what they\'re looking for\n' +
-      '4. Details — hiring manager or who it reports to\n' +
-      'NEVER ask about compensation.\n' +
+      '1. Location / remote setup (Role - Location)\n' +
+      '2. Compensation — OTE total cash + bonus in USD (Role - Compensation)\n' +
+      '3. Scope — responsibilities, team size, who the role reports to\n' +
+      '4. Criteria — key skills, reason for hire, interview panel\n' +
+      '5. Details — hiring manager or who it reports to\n' +
       'Ask generally — hint at a few possibilities rather than drilling on one thing ' +
-      '(e.g. "Do you have any more details — like the location, team size, or what they\'re looking for?").\n' +
+      '(e.g. "Do you have any more details — like the location, comp range, or team size?").\n' +
       'Max 2 sentences. Bold only the question with **double asterisks**. No other markdown.'
     );
     try {
       return await this._callClaude([{ role: 'user', content: prompt }], { maxTokens: 128 });
     } catch (e) {
-      return `**Do you have any more details on the role — like the location, team size, or what they're looking for in a candidate?**`;
+      return `**Do you have any more details on the role — like the location, comp range, team size, or what they're looking for in a candidate?**`;
     }
   }
 
   /**
-   * Use Claude to split a free-form user response into find vs notes components.
+   * Use Claude to extract all role fields from a free-form user response.
+   * Maps to Airtable fields: Role - Find, Role - Notes, Role - Location, Role - Compensation.
    * @param {string} userText
    * @param {string} roleTitle
-   * @returns {Promise<{find: string|null, notes: string|null}>}
+   * @returns {Promise<{find: string|null, notes: string|null, location: string|null, compensation: number|null}>}
    */
-  async _extractFindAndNotes(userText, roleTitle) {
+  async _extractRoleFields(userText, roleTitle) {
     const prompt = (
       `The user was asked what they know about the "${roleTitle}" role — ` +
       'including how to find/apply and what the role is like.\n\n' +
       `They replied: "${userText}"\n\n` +
-      'Extract two fields:\n' +
-      '- "find": how to find or apply (recruiter name, LinkedIn URL, referral contact, job board link) — null if not mentioned\n' +
-      '- "notes": what they know about the role (scope, requirements, hiring process, compensation, team) — null if not mentioned\n' +
-      'Return JSON only: {"find": "...", "notes": "..."}'
+      'Extract the following fields:\n' +
+      '- "find" (Role - Find): how to find or apply — who at the company is leading the search, recruiter name, referral contact, LinkedIn URL, or job posting URL. null if not mentioned.\n' +
+      '- "notes" (Role - Notes): structured role details as plain text using these section labels where info is available:\n' +
+      '    Scope: responsibilities, team size, who the role reports to\n' +
+      '    Criteria: key skills, interview panel, reason for hire\n' +
+      '    Details: hiring manager, reporting structure\n' +
+      '  Omit any section with no information. null if nothing to note.\n' +
+      '- "location" (Role - Location): office location and hybrid/remote setup. null if not mentioned.\n' +
+      '- "compensation" (Role - Compensation): total OTE cash + bonus in USD as a plain number (e.g. 250000). null if not mentioned.\n' +
+      'Return JSON only: {"find": "...", "notes": "...", "location": "...", "compensation": number|null}'
     );
     try {
       const raw = await this._callClaude(
         [{ role: 'user', content: prompt }],
-        { maxTokens: 256, system: 'You are a concise data extractor. Return valid JSON only.' }
+        { maxTokens: 400, system: 'You are a concise data extractor. Return valid JSON only.' }
       );
       const cleaned = raw.trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim();
       return JSON.parse(cleaned);
     } catch (e) {
-      console.debug(`_extractFindAndNotes parse failed for '${roleTitle}'`);
-      return { find: null, notes: userText.trim() };
+      console.debug(`_extractRoleFields parse failed for '${roleTitle}'`);
+      return { find: null, notes: userText.trim(), location: null, compensation: null };
     }
   }
 
@@ -1544,8 +1561,10 @@ class InsightsAgent {
       state.suggestedUpdates.new_role = {
         Title: pe.roleTitle,
         Company: pe.companyName,
-        ...(pe.find  ? { Find:  pe.find  } : {}),
-        ...(pe.notes ? { Notes: pe.notes } : {}),
+        ...(pe.find         ? { 'Role - Find':         pe.find         } : {}),
+        ...(pe.notes        ? { 'Role - Notes':        pe.notes        } : {}),
+        ...(pe.location     ? { 'Role - Location':     pe.location     } : {}),
+        ...(pe.compensation != null ? { 'Role - Compensation': pe.compensation } : {}),
       };
     }
 

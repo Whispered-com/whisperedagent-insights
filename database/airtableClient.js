@@ -431,16 +431,17 @@ class AirtableClient {
    * Create a new Role record linked to a company.
    * @param {string|null} companyRecordId  Airtable record ID for the linked company
    * @param {string} roleTitle
-   * @param {string|null} find   How to find/apply for the role
-   * @param {string|null} notes  Role details
+   * @param {object} [roleData]  Optional fields: find, notes, location, compensation
    * @returns {Promise<object|null>}
    */
-  async createRole(companyRecordId, roleTitle, find, notes) {
+  async createRole(companyRecordId, roleTitle, roleData = {}) {
     try {
       const fields = { 'Title': roleTitle };
       if (companyRecordId) fields['Company'] = [companyRecordId];
-      if (find) fields['Find'] = find;
-      if (notes) fields['Notes'] = notes;
+      if (roleData.find)             fields['Role - Find']         = roleData.find;
+      if (roleData.notes)            fields['Role - Notes']        = roleData.notes;
+      if (roleData.location)         fields['Role - Location']     = roleData.location;
+      if (roleData.compensation != null) fields['Role - Compensation'] = roleData.compensation;
       const record = await this.roles.create(fields);
       console.info(`createRole: created '${roleTitle}' → ${record.id}`);
       return toDict(record);
