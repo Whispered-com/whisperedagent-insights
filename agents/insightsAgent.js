@@ -371,9 +371,11 @@ class InsightsAgent {
 
     const lines = candidates.map((c, i) => {
       const name = (c.fields || {})['Company Name'] || 'Unknown';
-      const desc = (c.fields || {}).Description || '';
-      const blurb = desc ? `: ${desc.substring(0, 80)}...` : '';
-      return `${i + 1}. **${name}**${blurb}`;
+      const rawDomain = ((c.fields || {}).Domain || '').trim();
+      const fullUrl = this._ensureHttps(rawDomain);
+      const bareHost = rawDomain.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').trim();
+      const domainPart = (fullUrl && bareHost) ? ` ([${bareHost}](${fullUrl}))` : '';
+      return `${i + 1}. **${name}**${domainPart}`;
     });
 
     return (
