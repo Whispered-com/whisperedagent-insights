@@ -219,9 +219,9 @@ class InsightsAgent {
       return this._startNewEntityCollection(state, companyName, roleTitle, false);
     }
 
-    // Premium: company found but no matching role → show other roles at this company
-    if (!roleRecord && companyRecord && roleTitle && state.mode === 'premium') {
-      return await this._premiumRoleNotFoundResponse(state, companyRecord, roleTitle);
+    // Company found but role not in DB → start collection flow (all tiers)
+    if (!roleRecord && companyRecord && roleTitle) {
+      return await this._roleNotFoundAtCompany(state, companyRecord, roleTitle);
     }
 
     if (companyRecord) {
@@ -697,6 +697,16 @@ class InsightsAgent {
     }
 
     // Guard: if the user is clearly replying to the agent's last question, skip entity-switching.
+    // Exception: when in company-found mode with no active role, a role name always takes priority
+    // so that "SDR leader" (answering "What's the role?") routes to collection rather than gap-fill.
+    if (state.companyRecordId && !state.roleRecordId && !this._isRolesListIntent(userText)) {
+      const parsed = await this._parseCompanyAndRole(userText);
+      if (parsed.role && parsed.role.length >= 3) {
+        state.phase = Phase.IDENTIFY;
+        return this._handleIdentify(state, userText);
+      }
+    }
+
     if (await this._isContinuationReply(state, userText)) {
       const clarification = await this._attributionClarification(state, userText);
       if (clarification) return clarification;
@@ -1084,36 +1094,13 @@ class InsightsAgent {
     return roles; // on failure, return all roles (safest)
   }
 
-  async _premiumRoleNotFoundResponse(state, companyRecord, roleQuery) {
+  async _roleNotFoundAtCompany(state, companyRecord, roleQuery) {
     state.companyRecordId = companyRecord.id;
     state.companyName = this._field(companyRecord.fields, 'Company Name');
     const rawDomain = this._field(companyRecord.fields, 'Domain');
     state.companyDomain = this._ensureHttps(rawDomain.trim());
-    state.phase = Phase.COMPANY_FOUND;
-
-    const roles = await this.db.getCompanyRoles(companyRecord.id);
-    const coRef = this._companyRef(state);
-
-    if (!roles.length) {
-      return this._startNewEntityCollection(state, state.companyName, roleQuery, true);
-    }
-
-    const openRoles = roles.filter(
-      r => this._field(r.fields, 'Status', 'open').toLowerCase() !== 'closed'
-    );
-    const displayRoles = openRoles.length > 0 ? openRoles : roles;
-    const roleLines = displayRoles.map(r => {
-      const rf = r.fields || {};
-      let line = `- **${rf.Title || 'Untitled'}**`;
-      if (rf.Function) line += ` (${rf.Function})`;
-      return line;
-    });
-
-    return (
-      `I couldn't find a **${roleQuery}** role at ${coRef}, ` +
-      `but here are the other roles we're tracking there:\n\n${roleLines.join('\n')}\n\n` +
-      'Is one of these what you were looking for?'
-    );
+    // Start collection — company already exists, just the role is new
+    return this._startNewEntityCollection(state, state.companyName, roleQuery, true);
   }
 
   // ------------------------------------------------------------------
@@ -1307,29 +1294,36 @@ class InsightsAgent {
   }
 
   /**
-   * Generate one targeted follow-up question based on what's still missing for the new role.
-   * Priority: how to find/apply → scope/location.
+   * Generate one targeted follow-up question for a new role, phrased generally.
+   * Priority: Location → Scope/team size → Criteria (reason for hire) → Details (HM)
+   * Never ask about compensation.
    * @param {object} pe  pendingNewEntity
    * @returns {Promise<string>}
    */
   async _generateNewRoleFollowUp(pe) {
     const known = [
-      pe.find  ? `How to apply: ${pe.find}` : null,
-      pe.notes ? `Role details: ${pe.notes}` : null,
+      pe.find  ? `How to find/apply: ${pe.find}` : null,
+      pe.notes ? `Details shared: ${pe.notes}` : null,
     ].filter(Boolean).join('\n');
 
     const prompt = (
-      `We're adding a new role to our database: "${pe.roleTitle}" at "${pe.companyName}".\n` +
-      (known ? `We already have:\n${known}\n\n` : '\n') +
-      'Ask ONE brief follow-up question to get the most important missing detail. Priority order:\n' +
-      (!pe.find ? '1. How to find or apply (recruiter name, LinkedIn, internal contact, job board)\n' : '') +
-      '2. Role scope, location, or key requirements if not yet clear\n' +
-      'Be warm and concise (1-2 sentences). Bold only the question with **double asterisks**.'
+      `We're capturing a new role: "${pe.roleTitle}" at "${pe.companyName}".\n` +
+      (known ? `What we know so far:\n${known}\n\n` : '\n') +
+      'Write ONE warm follow-up question to gather the most important missing detail.\n' +
+      'Priority (check what is NOT yet covered above and pick the top gap):\n' +
+      '1. Location / remote setup\n' +
+      '2. Scope — responsibilities or team size\n' +
+      '3. Criteria — reason for hire or what they\'re looking for\n' +
+      '4. Details — hiring manager or who it reports to\n' +
+      'NEVER ask about compensation.\n' +
+      'Ask generally — hint at a few possibilities rather than drilling on one thing ' +
+      '(e.g. "Do you have any more details — like the location, team size, or what they\'re looking for?").\n' +
+      'Max 2 sentences. Bold only the question with **double asterisks**. No other markdown.'
     );
     try {
       return await this._callClaude([{ role: 'user', content: prompt }], { maxTokens: 128 });
     } catch (e) {
-      return `**Anything else you know — how to find it or what scope/location looks like?**`;
+      return `**Do you have any more details on the role — like the location, team size, or what they're looking for in a candidate?**`;
     }
   }
 
