@@ -1188,38 +1188,53 @@ class InsightsAgent {
         return `**Which company is this role at?**`;
       }
 
-      // Move to domain collection (skip if company already exists in DB)
+      // Try to auto-lookup the domain from Claude's training knowledge
+      if (!pe.hasExistingCompany) {
+        pe.domain = await this._lookupDomain(pe.companyName);
+      }
+
+      // Company already in DB — skip domain, go straight to role info
       if (pe.hasExistingCompany) {
         if (!pe.roleTitle) {
           pe.step = 'get_role';
           return `**What's the title of the role you're asking about?**`;
         }
-        pe.step = 'find';
+        pe.step = 'find_and_notes';
         return (
           `Got it — **${pe.roleTitle}** at **${pe.companyName}**. We don't have that role yet. ` +
-          `**How do you find or apply for it? (recruiter contact, LinkedIn link, internal referral, etc.)**`
+          `**What do you know about it — how would someone find or apply, and what's the role like?**`
         );
       }
 
-      pe.step = 'domain';
-      const companyRef = pe.companyName;
-      if (pe.roleTitle) {
-        return (
-          `Got it — **${pe.roleTitle}** at **${companyRef}**. We'll add both. ` +
-          `**What's ${companyRef}'s website or domain?**`
-        );
+      // Domain found automatically — skip asking for it
+      if (pe.domain) {
+        if (pe.roleTitle) {
+          pe.step = 'find_and_notes';
+          return (
+            `Got it — **${pe.roleTitle}** at **${pe.companyName}**. We'll add both. ` +
+            `**What do you know about this role — how would someone find or apply, and what's it like?**`
+          );
+        }
+        // Company-only and domain resolved — save now
+        return this._saveNewEntity(state);
       }
-      return (
-        `Got it — **${companyRef}**. We'll add it. ` +
-        `**What's ${companyRef}'s website or domain?**`
-      );
+
+      // Domain unknown — ask the user
+      pe.step = pe.roleTitle ? 'domain_then_role' : 'domain_only';
+      const companyRef = pe.companyName;
+      return `Got it — **${companyRef}**. **What's their website or domain?**`;
     }
 
     // ── Step: get_company ─────────────────────────────────────────────
     if (pe.step === 'get_company') {
       const parsed = await this._parseCompanyAndRole(userText);
       pe.companyName = parsed.company || userText.trim();
-      pe.step = 'domain';
+      pe.domain = await this._lookupDomain(pe.companyName);
+      if (pe.domain && pe.roleTitle) {
+        pe.step = 'find_and_notes';
+        return `**What do you know about the ${pe.roleTitle} role — how would someone find or apply, and what's it like?**`;
+      }
+      pe.step = pe.roleTitle ? 'domain_then_role' : 'domain_only';
       return `**What's ${pe.companyName}'s website or domain?**`;
     }
 
@@ -1227,34 +1242,28 @@ class InsightsAgent {
     if (pe.step === 'get_role') {
       const parsed = await this._parseCompanyAndRole(userText);
       pe.roleTitle = parsed.role || userText.trim();
-      pe.step = 'find';
-      return `**How do you find or apply for the ${pe.roleTitle} role? (recruiter contact, LinkedIn link, internal referral, etc.)**`;
+      pe.step = 'find_and_notes';
+      return `**What do you know about the ${pe.roleTitle} role — how would someone find or apply, and what's it like?**`;
     }
 
-    // ── Step: domain ──────────────────────────────────────────────────
-    if (pe.step === 'domain') {
-      // Strip protocol and path — keep just the domain
+    // ── Step: domain (user-provided) ──────────────────────────────────
+    if (pe.step === 'domain_only' || pe.step === 'domain_then_role') {
       const raw = userText.trim().replace(/^https?:\/\//, '').split('/')[0].trim();
       pe.domain = raw || userText.trim();
 
-      if (pe.roleTitle) {
-        pe.step = 'find';
-        return `Thanks! **How do you find or apply for the ${pe.roleTitle} role? (recruiter contact, LinkedIn link, internal referral, etc.)**`;
+      if (pe.step === 'domain_then_role' && pe.roleTitle) {
+        pe.step = 'find_and_notes';
+        return `**What do you know about the ${pe.roleTitle} role — how would someone find or apply, and what's it like?**`;
       }
       // Company-only — save now
       return this._saveNewEntity(state);
     }
 
-    // ── Step: find ────────────────────────────────────────────────────
-    if (pe.step === 'find') {
-      pe.find = userText.trim() || null;
-      pe.step = 'notes';
-      return `Got it. **What do you know about the role? (scope, what they're looking for, hiring process, compensation, etc.)**`;
-    }
-
-    // ── Step: notes ───────────────────────────────────────────────────
-    if (pe.step === 'notes') {
-      pe.notes = userText.trim() || null;
+    // ── Step: find_and_notes ──────────────────────────────────────────
+    if (pe.step === 'find_and_notes') {
+      const extracted = await this._extractFindAndNotes(userText, pe.roleTitle);
+      pe.find = extracted.find || null;
+      pe.notes = extracted.notes || null;
       return this._saveNewEntity(state);
     }
 
@@ -1263,73 +1272,113 @@ class InsightsAgent {
     return this._handleIdentify(state, userText);
   }
 
-  async _saveNewEntity(state) {
+  /**
+   * Try to resolve a company's domain using Claude's training knowledge.
+   * Returns the bare domain string (e.g. 'acme.com') or null if unknown.
+   * @param {string} companyName
+   * @returns {Promise<string|null>}
+   */
+  async _lookupDomain(companyName) {
+    const prompt = (
+      `What is the primary website domain for the company "${companyName}"?\n` +
+      'Reply with ONLY the bare domain (e.g. "acme.com") with no protocol or path. ' +
+      'If you are not confident, reply with exactly: null'
+    );
+    try {
+      const raw = await this._callClaude(
+        [{ role: 'user', content: prompt }],
+        { maxTokens: 32, system: 'You are a factual assistant. Return only what is asked, nothing else.' }
+      );
+      const domain = raw.trim().toLowerCase().replace(/^https?:\/\//, '').split('/')[0].trim();
+      if (domain && domain !== 'null' && domain.includes('.')) return domain;
+    } catch (e) {
+      console.debug(`_lookupDomain failed for '${companyName}'`);
+    }
+    return null;
+  }
+
+  /**
+   * Use Claude to split a free-form user response into find vs notes components.
+   * @param {string} userText
+   * @param {string} roleTitle
+   * @returns {Promise<{find: string|null, notes: string|null}>}
+   */
+  async _extractFindAndNotes(userText, roleTitle) {
+    const prompt = (
+      `The user was asked what they know about the "${roleTitle}" role — ` +
+      'including how to find/apply and what the role is like.\n\n' +
+      `They replied: "${userText}"\n\n` +
+      'Extract two fields:\n' +
+      '- "find": how to find or apply (recruiter name, LinkedIn URL, referral contact, job board link) — null if not mentioned\n' +
+      '- "notes": what they know about the role (scope, requirements, hiring process, compensation, team) — null if not mentioned\n' +
+      'Return JSON only: {"find": "...", "notes": "..."}'
+    );
+    try {
+      const raw = await this._callClaude(
+        [{ role: 'user', content: prompt }],
+        { maxTokens: 256, system: 'You are a concise data extractor. Return valid JSON only.' }
+      );
+      const cleaned = raw.trim().replace(/^```json\n?/, '').replace(/^```\n?/, '').replace(/\n?```$/, '').trim();
+      return JSON.parse(cleaned);
+    } catch (e) {
+      console.debug(`_extractFindAndNotes parse failed for '${roleTitle}'`);
+      return { find: null, notes: userText.trim() };
+    }
+  }
+
+  _saveNewEntity(state) {
     const pe = state.pendingNewEntity;
     if (!pe) {
       state.phase = Phase.IDENTIFY;
       return `Something went wrong — what company or role would you like to explore?`;
     }
 
-    try {
-      let companyRecord = null;
+    // Update conversation state
+    state.companyName = pe.companyName || state.companyName;
+    state.companyDomain = pe.domain ? this._ensureHttps(pe.domain) : state.companyDomain;
+    if (pe.roleTitle) state.roleTitle = pe.roleTitle;
 
-      if (!pe.hasExistingCompany && pe.companyName) {
-        companyRecord = await this.db.createCompany(pe.companyName, pe.domain);
-      } else if (state.companyRecordId) {
-        // Company already exists — fetch its record so we can link the role
-        companyRecord = await this.db.getCompany(state.companyRecordId);
-      }
+    // Push collected data to suggestedUpdates for the UI panel
+    if (!state.suggestedUpdates) state.suggestedUpdates = {};
+    state.suggestedUpdates.company_name = pe.companyName;
+    state.suggestedUpdates.role_name = pe.roleTitle || undefined;
 
-      let roleRecord = null;
-      if (pe.roleTitle) {
-        roleRecord = await this.db.createRole(
-          companyRecord ? companyRecord.id : null,
-          pe.roleTitle,
-          pe.find,
-          pe.notes,
-        );
-      }
-
-      // Update conversation state
-      if (companyRecord) {
-        state.companyRecordId = companyRecord.id;
-        state.companyName = pe.companyName || this._field(companyRecord.fields, 'Company Name');
-        const rawDomain = pe.domain || this._field(companyRecord.fields, 'Domain');
-        state.companyDomain = rawDomain ? this._ensureHttps(rawDomain) : null;
-      }
-      if (roleRecord) {
-        state.roleRecordId = roleRecord.id;
-        state.roleTitle = pe.roleTitle;
-      }
-
-      state.pendingNewEntity = null;
-
-      const companyRef = this._companyRef(state);
-
-      if (roleRecord) {
-        state.phase = Phase.ROLE_FOUND;
-        return (
-          `Added — **${pe.roleTitle}** at **${pe.companyName}** is now in our database. ` +
-          'Your contribution helps the whole community. ' +
-          `**Is there anything else you've learned about this role — hiring manager, team setup, or interview process?**`
-        );
-      }
-      if (companyRecord) {
-        state.phase = Phase.COMPANY_FOUND;
-        return (
-          `Added — **${pe.companyName}** is now in our database. ` +
-          `**Is there a specific role at ${companyRef} you're exploring?**`
-        );
-      }
-
-      state.phase = Phase.IDENTIFY;
-      return `Thanks for the info! **What would you like to explore next?**`;
-    } catch (err) {
-      console.warn(`_saveNewEntity failed: ${err.message}`);
-      state.pendingNewEntity = null;
-      state.phase = Phase.IDENTIFY;
-      return `I ran into an issue saving that to our database. **What else can I help you with?**`;
+    if (pe.companyName && !pe.hasExistingCompany) {
+      state.suggestedUpdates.company = {
+        ...(state.suggestedUpdates.company || {}),
+        'Company Name': pe.companyName,
+        ...(pe.domain ? { 'Domain Dirty': pe.domain } : {}),
+      };
     }
+
+    if (pe.roleTitle) {
+      state.suggestedUpdates.role = {
+        ...(state.suggestedUpdates.role || {}),
+        Title: pe.roleTitle,
+        Company: pe.companyName,
+        ...(pe.find ? { Find: pe.find } : {}),
+        ...(pe.notes ? { Notes: pe.notes } : {}),
+      };
+    }
+
+    state.pendingNewEntity = null;
+
+    const companyRef = this._companyRef(state);
+
+    if (pe.roleTitle) {
+      state.phase = Phase.ROLE_FOUND;
+      return (
+        `Captured — **${pe.roleTitle}** at **${pe.companyName}** has been queued for our database. ` +
+        'Your contribution helps the whole community. ' +
+        `**Is there anything else you've learned about this role — hiring manager, team setup, or interview process?**`
+      );
+    }
+
+    state.phase = Phase.COMPANY_FOUND;
+    return (
+      `Captured — **${pe.companyName}** has been queued for our database. ` +
+      `**Is there a specific role at ${companyRef} you're exploring?**`
+    );
   }
 
   async _simpleMerge(fieldName, existing, newInfo) {
