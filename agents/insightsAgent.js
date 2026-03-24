@@ -1193,8 +1193,40 @@ class InsightsAgent {
     state.companyName = this._field(companyRecord.fields, 'Company Name');
     const rawDomain = this._field(companyRecord.fields, 'Domain');
     state.companyDomain = this._ensureHttps(rawDomain.trim());
-    // Start collection — company already exists, just the role is new
-    return this._startNewEntityCollection(state, state.companyName, roleQuery, true);
+
+    // Fetch existing roles so we can tell the user what we DO have
+    const existingRoles = await this.db.getCompanyRoles(companyRecord.id);
+    const coRef = this._companyRef(state);
+
+    let roleSummary;
+    if (existingRoles.length === 0) {
+      roleSummary = "we're not tracking any roles there yet";
+    } else if (existingRoles.length === 1) {
+      const title = this._field(existingRoles[0].fields, 'Title');
+      roleSummary = `we're tracking 1 role (${title})`;
+    } else if (existingRoles.length <= 3) {
+      const titles = existingRoles.map(r => this._field(r.fields, 'Title')).join(', ');
+      roleSummary = `we're tracking ${existingRoles.length} roles (${titles})`;
+    } else {
+      roleSummary = `we're tracking ${existingRoles.length} roles`;
+    }
+
+    // Set up collection state (hasExistingCompany=true so domain isn't re-asked)
+    state.pendingNewEntity = {
+      companyName: state.companyName,
+      roleTitle: roleQuery,
+      domain: null,
+      find: null,
+      notes: null,
+      step: 'confirm',
+      hasExistingCompany: true,
+    };
+    state.phase = Phase.COLLECTING_NEW_ENTITY;
+
+    return (
+      `We have **${state.companyName}** in our database — ${roleSummary} but no **${roleQuery}** role. ` +
+      `Do you want to add the **${roleQuery}** role at ${coRef}?`
+    );
   }
 
   // ------------------------------------------------------------------
