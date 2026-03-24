@@ -377,7 +377,7 @@ class InsightsAgent {
     });
 
     return (
-      `I found a few companies that match — which one did you mean?\n\n${lines.join('\n')}`
+      `I found a few companies in our database that could match — did you mean one of these or do you have a new company to add?\n\n${lines.join('\n')}`
     );
   }
 
