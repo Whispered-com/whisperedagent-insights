@@ -1078,9 +1078,15 @@ class InsightsAgent {
   // ------------------------------------------------------------------
 
   async _generateCompanySynopsis(companyRecord, mode = 'premium', state = null) {
-    const roles = this._rolesForTier(await this.db.getCompanyRoles(companyRecord.id), mode);
+    const allRoles = await this.db.getCompanyRoles(companyRecord.id);
+    const roles = this._rolesForTier(allRoles, mode);
+    // For free tier, also surface the count of members-only roles so the prompt
+    // can acknowledge them without revealing titles.
+    const unpostedCount = mode === 'free'
+      ? allRoles.filter(r => this._roleStatus(r) === 'members-only').length
+      : 0;
     const companyUrl = state ? (state.companyDomain || '') : '';
-    const prompt = buildCompanySynopsisPrompt(companyRecord, roles, [], mode, companyUrl);
+    const prompt = buildCompanySynopsisPrompt(companyRecord, roles, [], mode, companyUrl, unpostedCount);
     return await this._callClaude([{ role: 'user', content: prompt }]);
   }
 

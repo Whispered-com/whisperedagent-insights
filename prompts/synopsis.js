@@ -18,7 +18,7 @@
  * @param {string} companyUrl
  * @returns {string}
  */
-function buildCompanySynopsisPrompt(company, roles, insights, mode = 'premium', companyUrl = '') {
+function buildCompanySynopsisPrompt(company, roles, insights, mode = 'premium', companyUrl = '', unpostedCount = 0) {
   const fields = company.fields || {};
   const companyName = fields['Company Name'] || 'Unknown';
   const companyRef = companyUrl ? `[${companyName}](${companyUrl})` : companyName;
@@ -45,8 +45,8 @@ Investors: ${investors || 'Unknown'}`.trim();
   }
 
   let rolesSection;
-  if (roles && roles.length > 0) {
-    const roleLines = roles.map(r => {
+  if ((roles && roles.length > 0) || unpostedCount > 0) {
+    const roleLines = (roles || []).map(r => {
       const rf = r.fields || {};
       if (mode === 'free') {
         return `- ${rf.Title || 'Untitled'}`;
@@ -63,6 +63,11 @@ Investors: ${investors || 'Unknown'}`.trim();
         `Notes: ${rf.Notes || ''}`
       );
     });
+    // Free tier: append placeholder lines for members-only (unposted) roles
+    if (mode === 'free' && unpostedCount > 0) {
+      const noun = unpostedCount === 1 ? 'unposted role' : 'unposted roles';
+      roleLines.push(`- ${unpostedCount} ${noun} (title and details available on Pro)`);
+    }
     rolesSection = 'OPEN ROLES:\n' + roleLines.join('\n');
   } else {
     rolesSection = 'OPEN ROLES: No open roles currently tracked.';
