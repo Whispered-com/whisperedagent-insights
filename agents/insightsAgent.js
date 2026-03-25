@@ -1085,6 +1085,11 @@ class InsightsAgent {
 
   async _generateCompanySynopsis(companyRecord, mode = 'premium', state = null) {
     const allRoles = await this.db.getCompanyRoles(companyRecord.id);
+    // DEBUG: log raw Status values to diagnose role count issues
+    allRoles.forEach(r => {
+      const s = (r.fields || {}).Status;
+      console.info(`[synopsis debug] role="${(r.fields||{}).Title}" Status=${JSON.stringify(s)} fieldKeys=${Object.keys(r.fields||{}).join(',')}`);
+    });
     const roles = this._rolesForTier(allRoles, mode);
     const companyUrl = state ? (state.companyDomain || '') : '';
     // For free synopsis, pass counts so the prompt shows "N open roles" or "X closed"
@@ -1096,6 +1101,7 @@ class InsightsAgent {
         return (Array.isArray(raw) ? raw.join(',') : String(raw)).toLowerCase().trim() === 'closed';
       }).length,
     } : null;
+    console.info(`[synopsis debug] mode=${mode} activeCount=${rolesSummary?.activeCount} closedCount=${rolesSummary?.closedCount}`);
     const prompt = buildCompanySynopsisPrompt(companyRecord, roles, [], mode, companyUrl, rolesSummary);
     return await this._callClaude([{ role: 'user', content: prompt }]);
   }
