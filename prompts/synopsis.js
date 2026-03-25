@@ -66,7 +66,7 @@ Investors: ${investors || 'Unknown'}`.trim();
     // Free tier: append placeholder lines for members-only (unposted) roles
     if (mode === 'free' && unpostedCount > 0) {
       const noun = unpostedCount === 1 ? 'unposted role' : 'unposted roles';
-      roleLines.push(`- ${unpostedCount} ${noun} (title and details available on Pro)`);
+      roleLines.push(`- ${unpostedCount} ${noun} (available only for paid members)`);
     }
     rolesSection = 'OPEN ROLES:\n' + roleLines.join('\n');
   } else {
