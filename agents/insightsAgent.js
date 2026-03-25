@@ -80,7 +80,7 @@ class InsightsAgent {
       greeting = (
         "Ask me about any company or role—I'll share available public info " +
         "(upgrade for access to unposted roles + company insights).\n\n" +
-        "You can also contribute unposted roles or confidential insights to help the community—and earn discounts."
+        "You can also contribute unposted roles or confidential insights to help the community."
       );
     } else if (mode === 'pro') {
       greeting = (
