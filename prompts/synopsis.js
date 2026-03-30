@@ -166,13 +166,16 @@ function buildRoleSynopsisPrompt(role, company, insights, mode = 'premium', topG
   const region = Array.isArray(regionArr) ? regionArr.join(', ') : regionArr;
 
   const functionLine = rf.Function ? `\nFunction: ${rf.Function}` : '';
+  const compLine = rf['Role - Compensation'] != null && rf['Role - Compensation'] !== ''
+    ? `\nCompensation: ${rf['Role - Compensation']}`
+    : '';
   let roleSection = `ROLE: ${roleTitle}${functionLine}
 Company: ${companyName}
 Hiring Manager: ${rf['HM Name'] || 'Unknown'}
 Region: ${region || cf.HQ || 'Unknown'}
 Remote: ${rf.Remote ? 'Yes' : 'No'}
 How to Find / Apply: ${rf.Find || 'Unknown'}
-Notes: ${rf.Notes || 'None.'}`.trim();
+Notes: ${rf.Notes || 'None.'}${compLine}`.trim();
 
   let insightsSection = '';
   if (mode === 'free') {

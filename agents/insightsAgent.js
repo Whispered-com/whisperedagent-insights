@@ -782,6 +782,15 @@ class InsightsAgent {
       }
     }
 
+    // Gate general comp benchmark questions for non-premium members.
+    if (state.mode !== 'premium' && this._isCompBenchmarkIntent(userText)) {
+      return (
+        'We don\'t share general compensation benchmarks — that\'s available to **Premium members**. ' +
+        'If you\'re asking about comp data we have on file for this specific role, I\'ll include it when it\'s available. ' +
+        '**Upgrade to Premium to access comp benchmarks and deeper hiring insights.**'
+      );
+    }
+
     if (await this._isContinuationReply(state, userText)) {
       const clarification = await this._attributionClarification(state, userText);
       if (clarification) return clarification;
@@ -1085,6 +1094,20 @@ class InsightsAgent {
       return `We have ${closedRoles.length} previously tracked ${noun} for ${coRef}, but they're all closed at the moment. **Become a paid member to get notified when new roles open up.**`;
     }
     return `I don't have any roles tracked for ${coRef} at the moment.`;
+  }
+
+  /** Returns true when the user is asking about general comp benchmarks (not specific role data). */
+  _isCompBenchmarkIntent(text) {
+    const low = text.toLowerCase();
+    // General benchmark signals
+    if (/\b(benchmark|market rate|going rate|industry standard|industry average)\b/.test(low)) return true;
+    if (/\btypical (comp|compensation|salary|pay|package|base|equity|bonus)\b/.test(low)) return true;
+    if (/\b(average|usual|normally|generally|typically)\b.{0,30}\b(comp|compensation|salary|pay|earn|make)\b/.test(low)) return true;
+    if (/\bwhat (do|does|would|should).{0,20}\b(roles?|positions?|directors?|vps?|heads?)\b.{0,20}\b(make|earn|pay|get paid|comp)\b/.test(low)) return true;
+    if (/\b(salary|comp|compensation).{0,20}\b(range|ranges|band|bands|expectations?)\b/.test(low)) return true;
+    if (/\bcomp.{0,25}\broles? like (this|these)\b/.test(low)) return true;
+    if (/\bwhat.{0,20}\bpay(s)? (for|like)\b/.test(low)) return true;
+    return false;
   }
 
   _isRolesListIntent(text) {
