@@ -476,50 +476,7 @@ class InsightsAgent {
     if (mode === 'free' && !state.roleRecordId) {
       state.phase = Phase.COMPANY_FOUND;
       if (rolesListIntent) {
-        const allRoles = await this.db.getCompanyRoles(state.companyRecordId);
-        // Posted roles are public — free users can see full details.
-        // Unposted (members-only) roles are gated behind a paid membership.
-        const publicOpenRoles = allRoles.filter(r =>
-          this._roleStatus(r) === 'public' && this._roleIsActive(r)
-        );
-        const unpostedActiveCount = allRoles.filter(r =>
-          this._roleStatus(r) === 'members-only' && this._roleIsActive(r)
-        ).length;
-        const closedRoles = allRoles.filter(r => {
-          const raw = this._field((r.fields || {}), 'Status', '');
-          return (Array.isArray(raw) ? raw.join(',') : String(raw)).toLowerCase().trim() === 'closed';
-        });
-        const coRef = this._companyRef(state);
-
-        if (publicOpenRoles.length > 0) {
-          // List posted roles in full — they're public info.
-          const coRec = await this.db.getCompany(state.companyRecordId);
-          const companyName = (coRec && coRec.fields) ? (coRec.fields['Company Name'] || coRef) : coRef;
-          publicOpenRoles.forEach(r => { r.fields._company_name = companyName; });
-          closedRoles.forEach(r => { r.fields._company_name = companyName; });
-          const companyUrl = state.companyDomain || '';
-          const prompt = buildRolesListingPrompt(coRec || {}, publicOpenRoles, closedRoles, companyUrl);
-          let response = await this._callClaude([{ role: 'user', content: prompt }]);
-          if (unpostedActiveCount > 0) {
-            const noun = unpostedActiveCount === 1 ? 'additional unposted role' : 'additional unposted roles';
-            response += `\n\nWe also have ${unpostedActiveCount} ${noun} shared confidentially with our community. **Become a paid member to see those details.**`;
-          }
-          return response;
-        }
-
-        if (unpostedActiveCount > 0) {
-          const noun = unpostedActiveCount === 1 ? 'role' : 'roles';
-          return (
-            `We do have ${unpostedActiveCount} active ${noun} tracked for ${coRef}. ` +
-            'These are roles shared with us in confidence — executives and recruiters trust our community\'s talent bar and discretion with sensitive, unannounced openings, so we only share them with paid members. ' +
-            '**Become a paid member to see the role titles and hiring details.**'
-          );
-        }
-        if (closedRoles.length > 0) {
-          const noun = closedRoles.length === 1 ? 'role' : 'roles';
-          return `We have ${closedRoles.length} previously tracked ${noun} for ${coRef}, but they're all closed at the moment. **Become a paid member to get notified when new roles open up.**`;
-        }
-        return `I don't have any roles tracked for ${coRef} at the moment.`;
+        return await this._handleFreeRolesListIntent(state);
       }
       const coRec = await this.db.getCompany(state.companyRecordId);
       return await this._generateCompanySynopsis(coRec, 'free', state);
@@ -743,28 +700,23 @@ class InsightsAgent {
     if (state.companyRecordId && this._isRolesListIntent(userText)) {
       if (state.mode === 'premium') {
         return await this._listCompanyRoles(state);
-      } else {
-        const roles = this._rolesForTier(
-          await this.db.getCompanyRoles(state.companyRecordId), state.mode
-        );
-        const count = roles.length;
-        const noun = count === 1 ? 'role' : 'roles';
-        const coRef = this._companyRef(state);
-        if (!count) return `I don't have any roles tracked for ${coRef} at the moment.`;
-        if (state.mode === 'free') {
-          return (
-            `We do have ${count} ${noun} tracked for ${coRef}, ` +
-            'but the details are only available on Pro and above. ' +
-            '**Upgrade to Pro to unlock the role titles and hiring details.**'
-          );
-        }
-        // pro
-        return (
-          `We do have ${count} ${noun} tracked for ${coRef}. ` +
-          '**Upgrade to Premium to see the full breakdown — ' +
-          "or is there a specific role you've already come across?**"
-        );
       }
+      if (state.mode === 'free') {
+        return await this._handleFreeRolesListIntent(state);
+      }
+      // pro
+      const roles = this._rolesForTier(
+        await this.db.getCompanyRoles(state.companyRecordId), 'pro'
+      );
+      const count = roles.length;
+      const noun = count === 1 ? 'role' : 'roles';
+      const coRef = this._companyRef(state);
+      if (!count) return `I don't have any roles tracked for ${coRef} at the moment.`;
+      return (
+        `We do have ${count} ${noun} tracked for ${coRef}. ` +
+        '**Upgrade to Premium to see the full breakdown — ' +
+        "or is there a specific role you've already come across?**"
+      );
     }
 
     // Detect "I have a new/another role" intent — respond warmly and set a flag so the
@@ -1059,6 +1011,54 @@ class InsightsAgent {
       /\b(add|submit|contribute|share)\b.{0,25}\b(role|position|job|opening)\b/.test(lower) ||
       /\b(role|position|job|opening)\b.{0,25}\b(to add|to submit|to contribute|to share)\b/.test(lower)
     );
+  }
+
+  /**
+   * Shared handler for "tell me about the roles" intent on free tier.
+   * Posted roles are public — show full details. Unposted roles are gated.
+   */
+  async _handleFreeRolesListIntent(state) {
+    const allRoles = await this.db.getCompanyRoles(state.companyRecordId);
+    const publicOpenRoles = allRoles.filter(r =>
+      this._roleStatus(r) === 'public' && this._roleIsActive(r)
+    );
+    const unpostedActiveCount = allRoles.filter(r =>
+      this._roleStatus(r) === 'members-only' && this._roleIsActive(r)
+    ).length;
+    const closedRoles = allRoles.filter(r => {
+      const raw = this._field((r.fields || {}), 'Status', '');
+      return (Array.isArray(raw) ? raw.join(',') : String(raw)).toLowerCase().trim() === 'closed';
+    });
+    const coRef = this._companyRef(state);
+
+    if (publicOpenRoles.length > 0) {
+      const coRec = await this.db.getCompany(state.companyRecordId);
+      const companyName = (coRec && coRec.fields) ? (coRec.fields['Company Name'] || coRef) : coRef;
+      publicOpenRoles.forEach(r => { r.fields._company_name = companyName; });
+      closedRoles.forEach(r => { r.fields._company_name = companyName; });
+      const companyUrl = state.companyDomain || '';
+      const prompt = buildRolesListingPrompt(coRec || {}, publicOpenRoles, closedRoles, companyUrl);
+      let response = await this._callClaude([{ role: 'user', content: prompt }]);
+      if (unpostedActiveCount > 0) {
+        const noun = unpostedActiveCount === 1 ? 'additional unposted role' : 'additional unposted roles';
+        response += `\n\nWe also have ${unpostedActiveCount} ${noun} shared confidentially with our community. **Become a paid member to see those details.**`;
+      }
+      return response;
+    }
+
+    if (unpostedActiveCount > 0) {
+      const noun = unpostedActiveCount === 1 ? 'role' : 'roles';
+      return (
+        `We do have ${unpostedActiveCount} active ${noun} tracked for ${coRef}. ` +
+        'These are roles shared with us in confidence — executives and recruiters trust our community\'s talent bar and discretion with sensitive, unannounced openings, so we only share them with paid members. ' +
+        '**Become a paid member to see the role titles and hiring details.**'
+      );
+    }
+    if (closedRoles.length > 0) {
+      const noun = closedRoles.length === 1 ? 'role' : 'roles';
+      return `We have ${closedRoles.length} previously tracked ${noun} for ${coRef}, but they're all closed at the moment. **Become a paid member to get notified when new roles open up.**`;
+    }
+    return `I don't have any roles tracked for ${coRef} at the moment.`;
   }
 
   _isRolesListIntent(text) {
