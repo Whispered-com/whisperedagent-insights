@@ -1070,7 +1070,7 @@ class InsightsAgent {
 
   _isRolesListIntent(text) {
     const low = text.toLowerCase();
-    return [
+    const phrases = [
       'what roles', 'which roles', 'list roles', 'any roles', 'open roles',
       'roles do you have', 'roles you have', 'roles we have', 'tell me roles',
       'tell me about the roles', 'tell me the roles', 'tell me about those roles',
@@ -1079,7 +1079,11 @@ class InsightsAgent {
       'roles in our', 'roles in the', 'roles at', 'roles for',
       'what positions', 'any positions', 'open positions',
       'what openings', 'any openings',
-    ].some(p => low.includes(p));
+      'the roles', 'the positions',
+    ];
+    if (phrases.some(p => low.includes(p))) return true;
+    // Catch verb-led requests: "show me the roles", "see those roles", "give me the positions", etc.
+    return /\b(show|see|view|give|get|find|check|learn about|hear about)\b.{0,20}\b(roles?|positions?|openings?)\b/.test(low);
   }
 
   async _listCompanyRoles(state) {
