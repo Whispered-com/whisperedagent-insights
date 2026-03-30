@@ -477,23 +477,47 @@ class InsightsAgent {
       state.phase = Phase.COMPANY_FOUND;
       if (rolesListIntent) {
         const allRoles = await this.db.getCompanyRoles(state.companyRecordId);
-        const activeCount = allRoles.filter(r => this._roleIsActive(r)).length;
-        const closedCount = allRoles.filter(r => {
+        // Posted roles are public — free users can see full details.
+        // Unposted (members-only) roles are gated behind a paid membership.
+        const publicOpenRoles = allRoles.filter(r =>
+          this._roleStatus(r) === 'public' && this._roleIsActive(r)
+        );
+        const unpostedActiveCount = allRoles.filter(r =>
+          this._roleStatus(r) === 'members-only' && this._roleIsActive(r)
+        ).length;
+        const closedRoles = allRoles.filter(r => {
           const raw = this._field((r.fields || {}), 'Status', '');
           return (Array.isArray(raw) ? raw.join(',') : String(raw)).toLowerCase().trim() === 'closed';
-        }).length;
+        });
         const coRef = this._companyRef(state);
-        if (activeCount > 0) {
-          const noun = activeCount === 1 ? 'role' : 'roles';
+
+        if (publicOpenRoles.length > 0) {
+          // List posted roles in full — they're public info.
+          const coRec = await this.db.getCompany(state.companyRecordId);
+          const companyName = (coRec && coRec.fields) ? (coRec.fields['Company Name'] || coRef) : coRef;
+          publicOpenRoles.forEach(r => { r.fields._company_name = companyName; });
+          closedRoles.forEach(r => { r.fields._company_name = companyName; });
+          const companyUrl = state.companyDomain || '';
+          const prompt = buildRolesListingPrompt(coRec || {}, publicOpenRoles, closedRoles, companyUrl);
+          let response = await this._callClaude([{ role: 'user', content: prompt }]);
+          if (unpostedActiveCount > 0) {
+            const noun = unpostedActiveCount === 1 ? 'additional unposted role' : 'additional unposted roles';
+            response += `\n\nWe also have ${unpostedActiveCount} ${noun} shared confidentially with our community. **Become a paid member to see those details.**`;
+          }
+          return response;
+        }
+
+        if (unpostedActiveCount > 0) {
+          const noun = unpostedActiveCount === 1 ? 'role' : 'roles';
           return (
-            `We do have ${activeCount} active ${noun} tracked for ${coRef}. ` +
+            `We do have ${unpostedActiveCount} active ${noun} tracked for ${coRef}. ` +
             'These are roles shared with us in confidence — executives and recruiters trust our community\'s talent bar and discretion with sensitive, unannounced openings, so we only share them with paid members. ' +
             '**Become a paid member to see the role titles and hiring details.**'
           );
         }
-        if (closedCount > 0) {
-          const noun = closedCount === 1 ? 'role' : 'roles';
-          return `We have ${closedCount} previously tracked ${noun} for ${coRef}, but they're all closed at the moment. **Become a paid member to get notified when new roles open up.**`;
+        if (closedRoles.length > 0) {
+          const noun = closedRoles.length === 1 ? 'role' : 'roles';
+          return `We have ${closedRoles.length} previously tracked ${noun} for ${coRef}, but they're all closed at the moment. **Become a paid member to get notified when new roles open up.**`;
         }
         return `I don't have any roles tracked for ${coRef} at the moment.`;
       }
