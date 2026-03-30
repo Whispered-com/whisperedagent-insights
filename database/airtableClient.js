@@ -125,7 +125,7 @@ class AirtableClient {
     this._statusNameCache = new Map();
     try {
       const tables = await this._getTablesMeta();
-      const rolesTable = tables.find(t => t.name === this._rolesTableName);
+      const rolesTable = tables.find(t => t.name === this._rolesTableName || t.id === this._rolesTableName);
       if (!rolesTable) return;
       const statusField = rolesTable.fields.find(
         f => f.name === 'Status' && f.type === 'multipleRecordLinks'
@@ -155,7 +155,7 @@ class AirtableClient {
   async _discoverCompaniesTable() {
     try {
       const tables = await this._getTablesMeta();
-      const rolesTable = tables.find(t => t.name === this._rolesTableName);
+      const rolesTable = tables.find(t => t.name === this._rolesTableName || t.id === this._rolesTableName);
       if (!rolesTable) throw new Error(`Table '${this._rolesTableName}' not found in schema`);
       const field = rolesTable.fields.find(
         f => f.name === this._companyFieldName && f.type === 'multipleRecordLinks'
@@ -498,7 +498,7 @@ class AirtableClient {
     if (this._locationOptionsCache !== null) return this._locationOptionsCache;
     try {
       const tables = await this._getTablesMeta();
-      const rolesTable = tables.find(t => t.name === this._rolesTableName);
+      const rolesTable = tables.find(t => t.name === this._rolesTableName || t.id === this._rolesTableName);
       if (rolesTable) {
         const regionField = rolesTable.fields.find(f => f.name === 'Region');
         if (regionField && regionField.options && regionField.options.choices) {
