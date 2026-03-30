@@ -1042,7 +1042,9 @@ class InsightsAgent {
     return [
       'what roles', 'which roles', 'list roles', 'any roles', 'open roles',
       'roles do you have', 'roles you have', 'roles we have', 'tell me roles',
-      'tell me about the roles', 'tell me the roles',
+      'tell me about the roles', 'tell me the roles', 'tell me about those roles',
+      'about those roles', 'about the roles', 'those roles', 'what are those roles',
+      'more about the roles', 'more on the roles', 'more about those',
       'roles in our', 'roles in the', 'roles at', 'roles for',
       'what positions', 'any positions', 'open positions',
       'what openings', 'any openings',
