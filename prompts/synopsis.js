@@ -50,10 +50,10 @@ Investors: ${investors || 'Unknown'}`.trim();
     const { activeCount = 0, closedCount = 0 } = rolesSummary;
     if (activeCount > 0) {
       const noun = activeCount === 1 ? 'open role' : 'open roles';
-      rolesSection = `OPEN ROLES: ${activeCount} ${noun} currently tracked.`;
+      rolesSection = `OPEN ROLES: ${activeCount} ${noun} on Whispered.`;
     } else if (closedCount > 0) {
       const noun = closedCount === 1 ? 'role' : 'roles';
-      rolesSection = `OPEN ROLES: No open roles right now. ${closedCount} previously closed ${noun} on file.`;
+      rolesSection = `OPEN ROLES: No open roles right now. ${closedCount} previously closed ${noun} on Whispered.`;
     } else {
       rolesSection = 'OPEN ROLES: No roles currently tracked.';
     }
