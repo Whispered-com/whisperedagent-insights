@@ -1018,16 +1018,28 @@ class InsightsAgent {
         allGapDescs.map((d, i) => `${i + 1}. ${d}`).join('\n')
       : '';
 
+    const isFirstFollowup = (state.insightFollowupsAsked || 0) === 0;
+    const followupInstruction = isFirstFollowup
+      ? (
+        'Respond in 1-2 sentences. First, briefly acknowledge what they shared — be warm and genuine. ' +
+        'Then ask ONE simple, low-pressure question about where they heard about or found this role ' +
+        '(e.g. through their network, a recruiter, a job board). Keep it light — they may not know all the details yet. ' +
+        'Do NOT ask detailed questions about the company strategy, team structure, or role scope yet.'
+      )
+      : (
+        'Respond in 2-3 sentences. First, briefly acknowledge or build on something specific the user just shared — ' +
+        'be genuine and specific, not generic. ' +
+        'Then end with ONE broad, friendly follow-up question. ' +
+        'If there are information gaps listed above, name 2-3 of them as examples of things we would love to know, ' +
+        'and invite the user to share anything they know on any of those areas — do NOT ask a single narrow question about just one gap. ' +
+        'If there are no gaps, simply ask whether they have anything else to share about the company or role. ' +
+        'Do NOT ask why the user wants the role or anything about their personal background or motivations.'
+      );
+
     system = (
       SYSTEM_PROMPT +
       gapContext +
-      '\n\nRespond in 2-3 sentences. First, briefly acknowledge or build on something specific the user just shared — ' +
-      'be genuine and specific, not generic. ' +
-      'Then end with ONE broad, friendly follow-up question. ' +
-      'If there are information gaps listed above, name 2-3 of them as examples of things we would love to know, ' +
-      'and invite the user to share anything they know on any of those areas — do NOT ask a single narrow question about just one gap. ' +
-      'If there are no gaps, simply ask whether they have anything else to share about the company or role. ' +
-      'Do NOT ask why the user wants the role or anything about their personal background or motivations.'
+      '\n\n' + followupInstruction
     );
 
     // Premium + role: ensure Claude always gives a brief overview of what we know
