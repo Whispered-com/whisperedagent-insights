@@ -1355,8 +1355,9 @@ class InsightsAgent {
     const topGap = allGaps.length > 0 ? allGaps[0][1] : null;
     const companyUrl = state ? (state.companyDomain || '') : '';
     const roleUrl = state ? (state.roleAppPage || '') : '';
+    const suggestStrategies = Math.random() < 0.25;
     const prompt = buildRoleSynopsisPrompt(
-      roleRecord, companyRecord || {}, [], mode, topGap, companyUrl, roleUrl
+      roleRecord, companyRecord || {}, [], mode, topGap, companyUrl, roleUrl, suggestStrategies
     );
     return await this._callClaude([{ role: 'user', content: prompt }]);
   }
