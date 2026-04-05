@@ -1567,7 +1567,7 @@ class InsightsAgent {
 
     // ── Step: find_and_notes ──────────────────────────────────────────
     if (pe.step === 'find_and_notes') {
-      const extracted = await this._extractRoleFields(userText, pe.roleTitle);
+      const extracted = await this._extractRoleFields(userText, pe.roleTitle, { askedAboutFind: true });
       pe.find = extracted.find || null;
       pe.notes = extracted.notes || null;
       pe.location = extracted.location || null;
@@ -1659,20 +1659,29 @@ class InsightsAgent {
    * @param {string} roleTitle
    * @returns {Promise<{find: string|null, notes: string|null, location: string|null, compensation: number|null}>}
    */
-  async _extractRoleFields(userText, roleTitle) {
+  async _extractRoleFields(userText, roleTitle, { askedAboutFind = false } = {}) {
+    const findHint = askedAboutFind
+      ? 'IMPORTANT: The user was specifically asked "how would someone find or apply" for this role, so any firm, person, or link they mention is almost certainly the "find" value — capture it even if phrased vaguely (e.g. "it\'s with [firm]", "through [person]").\n\n'
+      : '';
     const prompt = (
-      `The user was asked what they know about the "${roleTitle}" role — ` +
-      'including how to find/apply and what the role is like.\n\n' +
-      `They replied: "${userText}"\n\n` +
-      'Extract the following fields:\n' +
-      '- "find" (Role - Find): how to find or apply — who at the company is leading the search, recruiter name, referral contact, LinkedIn URL, or job posting URL. null if not mentioned.\n' +
+      findHint +
+      `The user shared info about the "${roleTitle}" role.\n\n` +
+      `They said: "${userText}"\n\n` +
+      'Extract the following fields. Be generous — capture partial info rather than returning null.\n\n' +
+      '- "find" (Role - Find): anything about how to find or reach this role. This includes:\n' +
+      '    • Recruiting/search firm names (e.g. "it\'s with the Cole Group", "through Spencer Stuart", "via Korn Ferry")\n' +
+      '    • Recruiter or contact names\n' +
+      '    • LinkedIn URL, job posting URL, or any website link\n' +
+      '    • Internal referral contacts at the company\n' +
+      '    • Hiring manager name if mentioned as the way to reach the role\n' +
+      '  If the user mentions ANY firm, person, or link as how to access this role, capture it here. null only if truly nothing.\n' +
       '- "notes" (Role - Notes): structured role details as plain text using these section labels where info is available:\n' +
       '    Scope: responsibilities, team size, who the role reports to\n' +
       '    Criteria: key skills, interview panel, reason for hire\n' +
       '    Details: hiring manager, reporting structure\n' +
       '  Omit any section with no information. null if nothing to note.\n' +
       '- "location" (Role - Location): office location and hybrid/remote setup. null if not mentioned.\n' +
-      '- "compensation" (Role - Compensation): total OTE cash + bonus in USD as a plain number (e.g. 250000). null if not mentioned.\n' +
+      '- "compensation" (Role - Compensation): total OTE cash + bonus in USD as a plain number (e.g. 250000). null if not mentioned.\n\n' +
       'Return JSON only: {"find": "...", "notes": "...", "location": "...", "compensation": number|null}'
     );
     try {
