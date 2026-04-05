@@ -463,6 +463,8 @@ class InsightsAgent {
           .replace(/add (a )?(new )?company\s*[-–]?\s*/i, '')
           .replace(/it'?s?\s+(a\s+)?new\s+(company\s*)?[-–]?\s*/i, '')
           .replace(/\b(new|add|different)\s+company\s*[-–]?\s*/i, '')
+          .replace(/\bto add\s*[-–]?\s*/i, '')
+          .replace(/^[-–\s]+/, '')   // strip any leading dashes/spaces left over
           .trim()
           .replace(/^(none|no|nope|not|nothing|nah)$/i, '') || null;
         state.phase = Phase.IDENTIFY;
