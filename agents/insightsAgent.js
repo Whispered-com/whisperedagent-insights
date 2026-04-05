@@ -1259,7 +1259,9 @@ class InsightsAgent {
         /\bclosed\b/.test(this._normalizeStatus(this._field((r.fields || {}), 'Status', '')))
       ).length,
     } : null;
-    const prompt = buildCompanySynopsisPrompt(companyRecord, roles, [], mode, companyUrl, rolesSummary);
+    const hasInsights = (mode === 'pro' || mode === 'premium') &&
+      !!((companyRecord.fields || {})['Confidential Notes'] || '').trim();
+    const prompt = buildCompanySynopsisPrompt(companyRecord, roles, [], mode, companyUrl, rolesSummary, hasInsights);
     return await this._callClaude([{ role: 'user', content: prompt }]);
   }
 

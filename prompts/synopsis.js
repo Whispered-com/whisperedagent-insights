@@ -18,7 +18,7 @@
  * @param {string} companyUrl
  * @returns {string}
  */
-function buildCompanySynopsisPrompt(company, roles, insights, mode = 'premium', companyUrl = '', rolesSummary = null) {
+function buildCompanySynopsisPrompt(company, roles, insights, mode = 'premium', companyUrl = '', rolesSummary = null, hasInsights = false) {
   const fields = company.fields || {};
   const companyName = fields['Company Name'] || 'Unknown';
   const companyRef = companyUrl ? `[${companyName}](${companyUrl})` : companyName;
@@ -162,7 +162,7 @@ ${freeRolesLine ? `Write a SHORT response that:
 IMPORTANT: Only reference facts that are explicitly present in the DATA ON FILE above. Do NOT invent, estimate, or compute any metric, score, or figure that does not appear verbatim in the data. If a field says "Not available" or "N/A", omit it entirely.
 Do not use any markdown other than the bold in the closing question above.` : `Write a SHORT response that:
 1. Gives the most useful snapshot of the company — what makes it interesting right now (1-2 sentences).
-2. If there are open roles, introduce them with "We have X open roles at [Company Name]:" (use the exact company name). List each role title on its own numbered line. If only one role, mention it inline.
+2. If there are open roles, introduce them like this (use the exact company name and adapt count naturally): "${hasInsights ? 'We have confidential insights from other members and [N] open role(s) at [Company Name]: [Title]' : 'We have [N] open role(s) at [Company Name]: [Title]'}". List each role on its own numbered line if there are multiple.
 3. Ends with ONE short, generic question: "**Are you interested in one of these roles, or do you have insights on the company?**" (adapt wording naturally if there's only one role or no roles). Do NOT ask a specific industry or market question.
 
 IMPORTANT: Only reference facts that are explicitly present in the DATA ON FILE above. Do NOT invent, estimate, or compute any metric, score, or figure that does not appear verbatim in the data. If a field says "Not available" or "N/A", omit it entirely.
