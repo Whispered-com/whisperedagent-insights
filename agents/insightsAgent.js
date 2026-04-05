@@ -53,6 +53,7 @@ Guidelines:
 - Bold the sentence containing your question using **double asterisks like this?** — do not bold anything else.
 - Do not use any other markdown (no ##, no -, no _).
 - CRITICAL: Your questions must always be about gathering intelligence on the role or company — hiring process, team structure, hiring manager, location/remote setup, compensation, company health, GTM motion, culture. NEVER ask why the user wants the role, what draws them to it, or anything about their personal background, motivations, or career goals. Those are not your job.
+- CRITICAL: You DO have access to unposted/confidential roles in the database. You simply cannot share them with free-tier users. Never say you "don't have visibility" into unposted roles — the restriction is about sharing, not access.
 `;
 
 // Pronoun/reference words that signal "the role we were just talking about"
@@ -1133,16 +1134,22 @@ class InsightsAgent {
     if (/\b(i have|i've got|i know (about|of)|i heard (about|of)|i'm sharing|here('s| is)|sharing|adding|submitting|contributing)\b.{0,40}\broles?\b/.test(low)) return false;
     if (/\b(it'?s|it is|this is|this role is|the role is)\b.{0,20}\b(unposted|not posted|confidential)\b/.test(low)) return false;
 
+    // "roles" or pronouns like "ones", "them", "those" standing in for roles
+    const roleWord = '(roles?|ones?|them|those|positions?)';
+    const requestVerb = '(show|see|access|view|get|share|reveal|unlock|find)';
+    const unpostedWord = '(unposted|confidential|hidden|private|gated|restricted|members.only|whispered)';
+
     return (
-      // Request to see unposted/confidential roles (requires request verb + unposted keyword)
-      /\b(show|see|access|view|get|share|reveal|unlock|find).{0,20}\b(unposted|confidential|hidden|private|gated|restricted|members.only|whispered)\b.{0,20}\broles?\b/.test(low) ||
-      /\b(unposted|confidential|hidden|private|gated|restricted|members.only|whispered)\b.{0,20}\broles?\b.{0,20}\b(show|see|access|view|get|share|reveal|unlock)\b/.test(low) ||
-      // "can I see/access the unposted roles" or "why can't I see..."
-      /\b(can i|could i|how do i|how can i|why can.?t i).{0,30}\b(see|access|view|get|unlock).{0,30}\broles?\b/.test(low) ||
-      // "show/see the other/those/all roles" (in context of having been told some are gated)
-      /\b(show|see|access|view|get|share|reveal|unlock).{0,20}\b(those|the other|other|all|remaining|rest of the).{0,15}\broles?\b/.test(low) ||
-      // "what are the other/those roles"
-      /\bwhat (are|about) (the other|those other|those|all the|the remaining) roles?\b/.test(low)
+      // "show me the unposted roles/ones"
+      new RegExp(`\\b${requestVerb}.{0,20}\\b${unpostedWord}\\b.{0,20}\\b${roleWord}\\b`).test(low) ||
+      // "unposted roles/ones — show me"
+      new RegExp(`\\b${unpostedWord}\\b.{0,20}\\b${roleWord}\\b.{0,20}\\b${requestVerb}\\b`).test(low) ||
+      // "can I / why can't I see/access ... roles/ones"
+      new RegExp(`\\b(can i|could i|how do i|how can i|why can.?t i).{0,30}\\b${requestVerb}.{0,30}\\b${roleWord}\\b`).test(low) ||
+      // "show/see the other/those/all roles/ones"
+      new RegExp(`\\b${requestVerb}.{0,20}\\b(those|the other|other|all|remaining|rest of the).{0,15}\\b${roleWord}\\b`).test(low) ||
+      // "what are the other/those roles/ones"
+      new RegExp(`\\bwhat (are|about) (the other|those other|those|all the|the remaining) ${roleWord}\\b`).test(low)
     );
   }
 
