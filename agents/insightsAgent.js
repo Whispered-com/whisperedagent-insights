@@ -111,8 +111,7 @@ class InsightsAgent {
       const reply = (
         `Unposted roles are shared with us in confidence by recruiters, companies and Whispered paid members. ` +
         `We get these roles because all parties trust that roles shared with Whispered remain confidential and don't spread publicly — so we can only share them with paying members who've agreed to our community standards.\n\n` +
-        `If you fit the criteria, apply for Pro/Premium and chat with our team about unlocking all roles and confidential company insights.\n\n` +
-        `[Apply for our paid plans](https://www.whispered.com/join)`
+        `[If you fit the criteria, apply for Pro/Premium](https://www.whispered.com/join) and chat with our team about unlocking all roles and confidential company insights.`
       );
       state.addAssistantMessage(reply);
       return reply;
