@@ -1055,17 +1055,41 @@ class InsightsAgent {
     return (url.startsWith('http://') || url.startsWith('https://')) ? url : 'https://' + url;
   }
 
+  /**
+   * Pick which agent to cross-promote next, alternating from the last one used.
+   * Context ('role' | 'company') breaks ties when no prior promo exists.
+   * Updates state.lastAgentPromoted and returns a one-sentence promo string.
+   */
+  _pickAgentPromo(state, context = 'role') {
+    const last = state.lastAgentPromoted;
+    let agent;
+    if (last === 'Strategies') {
+      agent = 'Connections';
+    } else if (last === 'Connections') {
+      agent = 'Strategies';
+    } else {
+      // No recent promo — context bias
+      agent = context === 'company' ? 'Connections' : 'Strategies';
+    }
+    state.lastAgentPromoted = agent;
+
+    if (agent === 'Strategies') {
+      const roleRef = state.roleTitle ? ` **${state.roleTitle}**` : '';
+      return `Check out our **Strategies** agent — I have hundreds of playbooks on how to find and win${roleRef} roles like this one.`;
+    } else {
+      const coRef = state.companyName ? ` **${state.companyName}**` : ' a company you're targeting';
+      return `Looking for an intro path into${coRef}? Our **Connections** agent can help you map your way in.`;
+    }
+  }
+
   /** Thank the user and invite them to bring up another company or role. */
   _buildInsightWrapUp(state) {
-    const entity = (state.roleTitle ? `${state.roleTitle} at ` : '') + (state.companyName || 'that');
     const base = `These insights are so powerful for the community — and help us help you.`;
+    const context = state.roleTitle ? 'role' : 'company';
 
-    if (state.roleTitle && Math.random() < 0.25) {
-      return (
-        `${base} I also have hundreds of playbooks on how to find and win **${state.roleTitle}** roles — ` +
-        `check out the **Strategies** agent for advice.\n\n` +
-        `**Are there other companies or roles I can help you with?**`
-      );
+    if (Math.random() < 0.25) {
+      const promo = this._pickAgentPromo(state, context);
+      return `${base} ${promo}\n\n**Are there other companies or roles I can help you with?**`;
     }
 
     return `${base} **Are there other companies or roles I can help you with?**`;
@@ -1363,9 +1387,11 @@ class InsightsAgent {
     const topGap = allGaps.length > 0 ? allGaps[0][1] : null;
     const companyUrl = state ? (state.companyDomain || '') : '';
     const roleUrl = state ? (state.roleAppPage || '') : '';
-    const suggestStrategies = Math.random() < 0.25;
+    const agentPromo = (state && Math.random() < 0.25)
+      ? this._pickAgentPromo(state, 'role')
+      : null;
     const prompt = buildRoleSynopsisPrompt(
-      roleRecord, companyRecord || {}, [], mode, topGap, companyUrl, roleUrl, suggestStrategies
+      roleRecord, companyRecord || {}, [], mode, topGap, companyUrl, roleUrl, agentPromo
     );
     return await this._callClaude([{ role: 'user', content: prompt }]);
   }
@@ -1884,9 +1910,9 @@ class InsightsAgent {
     const companyRef = this._companyRef(state);
 
     if (pe.roleTitle) {
+      const promo = this._pickAgentPromo(state, 'role');
       return (
-        `Thanks for sharing. I have hundreds of playbooks on how to find and win **${pe.roleTitle}** roles like this one. ` +
-        `Click on our **Strategies** agent or chat with me below for advice.\n\n` +
+        `Thanks for sharing. ${promo}\n\n` +
         `Where are you at in the process for this role, or would you like to discuss another role/company?`
       );
     }
