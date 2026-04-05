@@ -133,8 +133,8 @@ ${body}
 
 Write a SHORT response that:
 1. Gives the most useful snapshot of the company — what makes it interesting right now (1-2 sentences).
-2. If there are open roles, list each one on its own numbered line (e.g. "1. Enterprise Sales Leader\n2. VP of Demand Gen"). If there is only one role, mention it inline. Do not dump details — just the title.
-3. Ends with ONE short, generic question: "**Are you interested in one of these roles, or do you have insights on the company?**" (adapt wording naturally if there's only one role or no roles — e.g. "Are you exploring this role, or do you have insights on the company?"). Do NOT ask a specific industry or market question at this stage.
+2. If there are open roles, introduce them with "We have X open roles at [Company Name]:" (use the exact company name, not "this company" or "they"). Then list each role title on its own numbered line. If there is only one role, write "We have 1 open role at [Company Name]: [Title]" inline. Do not dump details — just the title.
+3. Ends with ONE short, generic question: "**Are you interested in one of these roles, or do you have insights on the company?**" (adapt wording naturally if there's only one role or no roles). Do NOT ask a specific industry or market question at this stage.
 
 IMPORTANT: Only reference facts that are explicitly present in the DATA ON FILE above. Do NOT invent, estimate, or compute any metric, score, or figure (such as a "growth outlook score") that does not appear verbatim in the data. If a field says "Not available" or "N/A", omit it entirely.
 

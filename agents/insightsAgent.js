@@ -1060,16 +1060,45 @@ class InsightsAgent {
     if (publicOpenRoles.length > 0) {
       const coRec = await this.db.getCompany(state.companyRecordId);
       const companyName = (coRec && coRec.fields) ? (coRec.fields['Company Name'] || coRef) : coRef;
-      publicOpenRoles.forEach(r => { r.fields._company_name = companyName; });
-      closedRoles.forEach(r => { r.fields._company_name = companyName; });
       const companyUrl = state.companyDomain || '';
-      const prompt = buildRolesListingPrompt(coRec || {}, publicOpenRoles, closedRoles, companyUrl);
-      let response = await this._callClaude([{ role: 'user', content: prompt }]);
+      const companyRef = companyUrl ? `[${companyName}](${companyUrl})` : companyName;
+
+      // Build count line: "We have X posted role(s) at Company and Y unposted roles"
+      const postedNoun = publicOpenRoles.length === 1 ? 'posted role' : 'posted roles';
+      let countLine = `We have ${publicOpenRoles.length} ${postedNoun} at ${companyRef}`;
       if (unpostedActiveCount > 0) {
-        const noun = unpostedActiveCount === 1 ? 'additional unposted role' : 'additional unposted roles';
-        response += `\n\nWe also have ${unpostedActiveCount} ${noun} shared confidentially with our community. **Become a paid member to see those details.**`;
+        const unpostedNoun = unpostedActiveCount === 1 ? 'unposted role' : 'unposted roles';
+        countLine += ` and ${unpostedActiveCount} ${unpostedNoun}`;
       }
-      return response;
+      countLine += ':';
+
+      // Numbered list of public roles
+      const roleLines = publicOpenRoles.map((r, i) => {
+        const rf = r.fields || {};
+        const title = rf.Title || 'Untitled';
+        const appPage = (rf['App Page'] || '').trim();
+        const titleRef = appPage ? `[${title}](${appPage})` : title;
+        const regionArr = rf.Region || [];
+        const region = (Array.isArray(regionArr) ? regionArr.join(', ') : regionArr) || '';
+        const remoteFlag = rf.Remote ? 'FULLY REMOTE' : '';
+        const location = [region, remoteFlag].filter(Boolean).join(' | ');
+        const hmPart = rf['HM Name'] ? `HM: ${rf['HM Name']}` : '';
+        const details = [hmPart, location].filter(Boolean).join(' | ');
+        return `${i + 1}. ${titleRef}${details ? ' — ' + details : ''}`;
+      }).join('\n');
+
+      // Unposted upsell line (after list)
+      let upsellLine = '';
+      if (unpostedActiveCount > 0) {
+        upsellLine = '\n\nThe unposted roles are shared confidentially with paid members. **Become a paid member to see those details.**';
+      }
+
+      // Closing question — non-presumptuous
+      const closingQ = publicOpenRoles.length === 1
+        ? '\n\n**Are you interested in this role, or do you have insights on the company?**'
+        : '\n\n**Are you interested in one of these roles, or do you have insights on the company?**';
+
+      return `${countLine}\n\n${roleLines}${upsellLine}${closingQ}`;
     }
 
     if (unpostedActiveCount > 0) {
