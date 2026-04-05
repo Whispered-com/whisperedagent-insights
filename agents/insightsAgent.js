@@ -1125,6 +1125,33 @@ class InsightsAgent {
     return `I don't have any roles tracked for ${coRef} at the moment.`;
   }
 
+  /**
+   * Returns true if a role title looks implausible (joke, fictional, nonsensical).
+   * Uses a quick Claude call to keep the check nuanced without a huge regex list.
+   */
+  async _isSuspiciousRole(title, company) {
+    const prompt = (
+      `You are a data quality checker for a professional community that tracks executive and senior-level job openings.\n\n` +
+      `Role title submitted: "${title}"\n` +
+      `Company: "${company}"\n\n` +
+      `Does this role title sound like a genuine, real-world professional job title that would appear at a real company? ` +
+      `Flag it as suspicious if it:\n` +
+      `- Contains food, cooking, or non-professional references (e.g. "Chief Popcorn Popper")\n` +
+      `- Is clearly fictional, humorous, or nonsensical\n` +
+      `- Contains words that don't belong in a job title (animals, fantasy terms, etc.)\n\n` +
+      `Reply with exactly one word: "ok" or "suspicious".`
+    );
+    try {
+      const raw = await this._callClaude(
+        [{ role: 'user', content: prompt }],
+        { maxTokens: 5, system: 'You are a data quality checker. Reply with exactly one word.' }
+      );
+      return raw.trim().toLowerCase().startsWith('suspicious');
+    } catch (e) {
+      return false; // on error, don't block submission
+    }
+  }
+
   /** Returns true when a free user is asking to see unposted/confidential/gated roles.
    * Must NOT match when the user is contributing/describing an unposted role. */
   _isUnpostedRolesRequest(text) {
@@ -1494,6 +1521,16 @@ class InsightsAgent {
         return `**Which company is this role at?**`;
       }
 
+      // Sanity check: if the role title looks implausible, ask the user to re-confirm
+      // before we invest in collecting details.
+      if (pe.roleTitle && await this._isSuspiciousRole(pe.roleTitle, pe.companyName)) {
+        pe.step = 'reconfirm_role';
+        return (
+          `Just double-checking — **"${pe.roleTitle}"** is an unusual title for a professional role. ` +
+          `**Can you confirm this is a genuine open position at ${pe.companyName}?**`
+        );
+      }
+
       // Try to auto-lookup the domain from Claude's training knowledge
       if (!pe.hasExistingCompany) {
         pe.domain = await this._lookupDomain(pe.companyName);
@@ -1532,6 +1569,23 @@ class InsightsAgent {
     }
 
     // ── Step: get_company ─────────────────────────────────────────────
+    // ── Step: reconfirm_role ──────────────────────────────────────────
+    // Reached when _isSuspiciousRole flagged the title; user must confirm it's real.
+    if (pe.step === 'reconfirm_role') {
+      if (isNo) {
+        state.pendingNewEntity = null;
+        state.phase = Phase.IDENTIFY;
+        return `No problem — feel free to share the correct role title when you have it.`;
+      }
+      // User confirmed it's real — proceed normally
+      pe.step = 'find_and_notes';
+      if (!pe.hasExistingCompany) pe.domain = pe.domain || await this._lookupDomain(pe.companyName);
+      return (
+        `Got it — **${pe.roleTitle}** at **${pe.companyName}**. ` +
+        `**What do you know about it — how would someone find or apply, and what's the role like?**`
+      );
+    }
+
     if (pe.step === 'get_company') {
       const parsed = await this._parseCompanyAndRole(userText);
       pe.companyName = parsed.company || userText.trim();
