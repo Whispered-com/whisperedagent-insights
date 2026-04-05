@@ -1918,7 +1918,7 @@ class InsightsAgent {
     }
 
     return (
-      `Captured — **${pe.companyName}** has been queued for our database. ` +
+      `We'll add **${pe.companyName}** to our database and enrich it with growth rate, investors and more. ` +
       `**Is there a specific role at ${companyRef} you're exploring?**`
     );
   }
