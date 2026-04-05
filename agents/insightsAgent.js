@@ -109,12 +109,7 @@ class InsightsAgent {
     // regardless of conversation phase, with the full confidentiality explanation.
     // Skip if user is actively contributing a role (they're sharing, not asking to see).
     if (mode === 'free' && state.phase !== Phase.COLLECTING_NEW_ENTITY && this._isUnpostedRolesRequest(userText)) {
-      const coRef = state.companyName ? ` at ${this._companyRef(state)}` : '';
-      const reply = (
-        `Unposted roles are shared with us in confidence by recruiters, companies and Whispered paid members. ` +
-        `We get these roles because all parties trust that roles shared with Whispered remain confidential and don't spread publicly — so we can only share them with paying members who've agreed to our community standards.\n\n` +
-        `[If you fit the criteria, apply for Pro/Premium](https://www.whispered.com/join) and chat with our team about unlocking all roles and confidential company insights.`
-      );
+      const reply = this._unpostedGatingMessage(state);
       state.addAssistantMessage(reply);
       return reply;
     }
@@ -811,11 +806,7 @@ class InsightsAgent {
       const allRoles = await this.db.getCompanyRoles(state.companyRecordId);
       const hasPublicOpen = allRoles.some(r => this._roleStatus(r) === 'public' && this._roleIsActive(r));
       if (!hasPublicOpen) {
-        return (
-          `Unposted roles are shared with us in confidence by recruiters, companies and Whispered paid members. ` +
-          `We get these roles because all parties trust that roles shared with Whispered remain confidential and don't spread publicly — so we can only share them with paying members who've agreed to our community standards.\n\n` +
-          `[If you fit the criteria, apply for Pro/Premium](https://www.whispered.com/join) and chat with our team about unlocking all roles and confidential company insights.`
-        );
+        return this._unpostedGatingMessage(state);
       }
     }
 
@@ -1176,6 +1167,24 @@ class InsightsAgent {
     } catch (e) {
       return false; // on error, don't block submission
     }
+  }
+
+  /**
+   * Standard confidentiality message for free users who ask about or express interest in
+   * unposted roles. Appends a context-aware follow-up question to keep the conversation going.
+   */
+  _unpostedGatingMessage(state) {
+    const companyName = state.companyName || null;
+    const coRef = companyName ? this._companyRef(state) : null;
+    const followUp = coRef
+      ? `**Are there other roles or companies you're exploring, or do you have insights on ${coRef} to share?**`
+      : `**Are there other roles or companies you're exploring, or do you have insights you'd like to share?**`;
+    return (
+      `Unposted roles are shared with us in confidence by recruiters, companies and Whispered paid members. ` +
+      `We get these roles because all parties trust that roles shared with Whispered remain confidential and don't spread publicly — so we can only share them with paying members who've agreed to our community standards.\n\n` +
+      `[If you fit the criteria, apply for Pro/Premium](https://www.whispered.com/join) and chat with our team about unlocking all roles and confidential company insights.\n\n` +
+      followUp
+    );
   }
 
   /** Returns true when a free user is asking to see unposted/confidential/gated roles.
