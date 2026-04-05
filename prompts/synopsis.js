@@ -68,8 +68,11 @@ Investors: ${investors || 'Unknown'}`.trim();
         const numbered = postedActive.map((r, i) => `${i + 1}. ${(r.fields || {}).Title || 'Untitled'}`).join('\n');
         freeRolesLine += '\n' + numbered;
         freeClosingQ = '**Are you interested in one of these roles, or do you have insights on the company?**';
-      } else {
+      } else if (postedCount === 1) {
         freeClosingQ = '**Are you interested in this role, or do you have insights on the company?**';
+      } else {
+        // Only unposted roles — user can't see the role title so don't ask if they're interested in it
+        freeClosingQ = `**Do you have any insights on the team or business at ${companyName}, or are there other roles or companies you're interested in?**`;
       }
     } else if (closedCount > 0) {
       const noun = closedCount === 1 ? 'role' : 'roles';
