@@ -446,9 +446,26 @@ class InsightsAgent {
     }
 
     if (!chosen) {
-      // User didn't pick from the list — they may have said "none of these" or
-      // named a different company altogether. Escape disambiguation and re-parse.
       state.candidateCompanyIds = [];
+
+      // Detect explicit "none of these / I want to add a new company" intent
+      const low = userText.toLowerCase();
+      const isNewCompanySignal = (
+        /\b(new|add|different|not (one of|any of|in the)|none of (these|those|them)|i have a new)\b/.test(low) &&
+        /\b(company|one|it)\b/.test(low)
+      ) || /\bnone\b/.test(low);
+
+      if (isNewCompanySignal) {
+        // Extract the company name from the text (strip noise like "i have a new company to add -")
+        const nameGuess = userText.replace(/i have a new company to add\s*[-–]?\s*/i, '')
+          .replace(/add (a )?(new )?company\s*[-–]?\s*/i, '')
+          .trim();
+        const companyName = nameGuess || null;
+        state.phase = Phase.IDENTIFY;
+        return this._startNewEntityCollection(state, companyName, null, false);
+      }
+
+      // User may have named a different company — re-parse from scratch.
       state.phase = Phase.IDENTIFY;
       return await this._handleIdentify(state, userText);
     }
