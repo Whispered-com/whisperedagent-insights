@@ -422,6 +422,16 @@ class InsightsAgent {
       console.debug(`_handleDisambiguatingCompany parse failed for '${userText}'`);
     }
 
+    // Fallback: if Claude didn't return a number, try direct name substring matching.
+    // Handles responses like "y about runbook", "runbook", "the first one (Runbook)", etc.
+    if (!chosen) {
+      const lower = userText.toLowerCase();
+      chosen = candidates.find(c => {
+        const name = ((c.fields || {})['Company Name'] || '').toLowerCase();
+        return name && lower.includes(name);
+      }) || null;
+    }
+
     if (!chosen) {
       // User didn't pick from the list — they may have said "none of these" or
       // named a different company altogether. Escape disambiguation and re-parse.
