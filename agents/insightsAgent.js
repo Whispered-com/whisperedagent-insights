@@ -106,7 +106,8 @@ class InsightsAgent {
 
     // Free tier: gate any request to see unposted/confidential roles upfront,
     // regardless of conversation phase, with the full confidentiality explanation.
-    if (mode === 'free' && this._isUnpostedRolesRequest(userText)) {
+    // Skip if user is actively contributing a role (they're sharing, not asking to see).
+    if (mode === 'free' && state.phase !== Phase.COLLECTING_NEW_ENTITY && this._isUnpostedRolesRequest(userText)) {
       const coRef = state.companyName ? ` at ${this._companyRef(state)}` : '';
       const reply = (
         `Unposted roles are shared with us in confidence by recruiters, companies and Whispered paid members. ` +
@@ -1123,22 +1124,25 @@ class InsightsAgent {
     return `I don't have any roles tracked for ${coRef} at the moment.`;
   }
 
-  /** Returns true when a free user is asking to see unposted/confidential/gated roles. */
+  /** Returns true when a free user is asking to see unposted/confidential/gated roles.
+   * Must NOT match when the user is contributing/describing an unposted role. */
   _isUnpostedRolesRequest(text) {
     const low = text.toLowerCase();
+
+    // Exclude contributing signals — user is sharing a role, not asking to see gated ones
+    if (/\b(i have|i've got|i know (about|of)|i heard (about|of)|i'm sharing|here('s| is)|sharing|adding|submitting|contributing)\b.{0,40}\broles?\b/.test(low)) return false;
+    if (/\b(it'?s|it is|this is|this role is|the role is)\b.{0,20}\b(unposted|not posted|confidential)\b/.test(low)) return false;
+
     return (
-      // Explicit unposted/confidential role keywords
-      /\b(unposted|whispered|confidential|hidden|private|members.only|gated|restricted|exclusive)\b.{0,30}\broles?\b/.test(low) ||
-      /\broles?\b.{0,30}\b(unposted|whispered|confidential|hidden|private|members.only|gated)\b/.test(low) ||
-      // "show/see/access/share the other roles / those roles / all roles"
-      /\b(show|see|access|view|get|share|reveal|unlock|tell me about).{0,25}\b(those|the other|other|all|remaining|rest of the|the rest).{0,20}\broles?\b/.test(low) ||
+      // Request to see unposted/confidential roles (requires request verb + unposted keyword)
+      /\b(show|see|access|view|get|share|reveal|unlock|find).{0,20}\b(unposted|confidential|hidden|private|gated|restricted|members.only|whispered)\b.{0,20}\broles?\b/.test(low) ||
+      /\b(unposted|confidential|hidden|private|gated|restricted|members.only|whispered)\b.{0,20}\broles?\b.{0,20}\b(show|see|access|view|get|share|reveal|unlock)\b/.test(low) ||
+      // "can I see/access the unposted roles" or "why can't I see..."
+      /\b(can i|could i|how do i|how can i|why can.?t i).{0,30}\b(see|access|view|get|unlock).{0,30}\broles?\b/.test(low) ||
+      // "show/see the other/those/all roles" (in context of having been told some are gated)
+      /\b(show|see|access|view|get|share|reveal|unlock).{0,20}\b(those|the other|other|all|remaining|rest of the).{0,15}\broles?\b/.test(low) ||
       // "what are the other/those roles"
-      /\bwhat (are|about) (the other|those other|those|all the|the remaining|the rest of the) roles?\b/.test(low) ||
-      // "can I see the X unposted / other roles"
-      /\b(can i|could i|how do i|how can i).{0,30}\b(see|access|view|get|unlock).{0,30}\broles?\b/.test(low) ||
-      // "upgrade" / "paid" / "pro" mentioned together with roles
-      /\b(upgrade|paid|pro|premium).{0,30}\broles?\b/.test(low) ||
-      /\broles?.{0,30}\b(upgrade|paid plan|pro plan|premium plan)\b/.test(low)
+      /\bwhat (are|about) (the other|those other|those|all the|the remaining) roles?\b/.test(low)
     );
   }
 
