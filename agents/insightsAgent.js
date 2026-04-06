@@ -160,7 +160,7 @@ class InsightsAgent {
           return `I didn't find any companies with "${keyword}" in their name. Is there a specific company you're looking for?`;
         }
         if (companies.length > 10) {
-          return `I found ${companies.length} companies with "${keyword}" in their name — that's a lot! **Can you be more specific with the name?**`;
+          return `We have **${companies.length} companies** with "${keyword}" in their name. Do you have a domain (e.g. airbase.com) or a more specific name I can search on?`;
         }
         const list = companies
           .map(c => {
