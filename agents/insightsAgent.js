@@ -919,7 +919,7 @@ class InsightsAgent {
       newCompany &&
       newCompany.length >= MIN_LEN &&
       newCompany.toLowerCase() !== currentCompany &&
-      !newCompany.toLowerCase().includes(currentCompany)
+      !currentCompany.includes(newCompany.toLowerCase())  // only skip if current *contains* the new mention
     );
     const sameCompanyMentioned = (
       newCompany &&
