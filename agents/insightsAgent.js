@@ -796,13 +796,9 @@ class InsightsAgent {
       );
     }
 
-    // Detect "role was filled/closed" — update status and ask who was hired.
+    // Detect "role was filled/closed" — queue a status update and ask who was hired.
     if (state.roleRecordId && this._isRoleFilledSignal(userText)) {
-      // Write to Airtable immediately (fire-and-forget, log on failure)
-      this.db.markRoleClosed(state.roleRecordId).catch(e =>
-        console.warn(`markRoleClosed fire-and-forget failed: ${e.message}`)
-      );
-      // Queue for the suggested-updates panel
+      // Queue for the suggested-updates panel (no immediate DB write — admin reviews first)
       if (!state.suggestedUpdates) state.suggestedUpdates = {};
       if (!state.suggestedUpdates.role) state.suggestedUpdates.role = {};
       state.suggestedUpdates.role.Status = '⚪️ Closed';
