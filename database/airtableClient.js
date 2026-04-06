@@ -297,6 +297,25 @@ class AirtableClient {
   }
 
   /**
+   * Return all company records whose name contains `keyword` as a substring.
+   * Used for name-based searches like "companies with 'air' in their name".
+   * @param {string} keyword
+   * @returns {Promise<Array>}
+   */
+  async findCompaniesBySubstring(keyword) {
+    const kw = keyword.toLowerCase();
+    try {
+      const allRecords = await this.companies.select().all();
+      return allRecords
+        .filter(r => (r.fields['Company Name'] || '').toLowerCase().includes(kw))
+        .map(toDict);
+    } catch (err) {
+      console.warn(`findCompaniesBySubstring failed for '${keyword}': ${err.message}`);
+      return [];
+    }
+  }
+
+  /**
    * Return all company records matching companyName (for disambiguation).
    * @param {string} companyName
    * @returns {Promise<Array>}

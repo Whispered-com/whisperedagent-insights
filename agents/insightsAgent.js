@@ -155,7 +155,7 @@ class InsightsAgent {
         || userText.match(/\bcalled\s+["']?(\w+)["']?\b/i);
       if (kwMatch) {
         const keyword = kwMatch[1].toLowerCase();
-        const companies = await this.db.findCompanies(keyword);
+        const companies = await this.db.findCompaniesBySubstring(keyword);
         if (!companies || companies.length === 0) {
           return `I didn't find any companies with "${keyword}" in their name. Is there a specific company you're looking for?`;
         }
